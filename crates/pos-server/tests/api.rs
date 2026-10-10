@@ -146,3 +146,60 @@ async fn errors_carry_reason_and_params_for_translation() {
     assert_eq!(status, StatusCode::OK);
     assert!(log.as_array().unwrap().iter().any(|e| e["action"] == "store.setup"));
 }
+
+#[tokio::test]
+async fn backoffice_is_for_admins_only() {
+    let app = app();
+    let (_, tiles) = call(&app, "GET", "/api/login-tiles", None, None).await;
+    let id_of = |name: &str| {
+        tiles.as_array().unwrap().iter().find(|t| t["name"] == name).unwrap()["id"].as_str().unwrap().to_string()
+    };
+    let sign_in = |id: String, secret: &'static str| {
+        let app = app.clone();
+        async move {
+            let (_, body) =
+                call(&app, "POST", "/api/login", None, Some(json!({ "userId": id, "secret": secret }))).await;
+            body["token"].as_str().unwrap().to_string()
+        }
+    };
+    let ali = sign_in(id_of("Ali"), "1234").await;
+    let owner = sign_in(id_of("Owner"), "owner1234").await;
+
+    for uri in
+        ["/api/dashboard?from=2026-10-01&to=2026-10-10", "/api/inventory", "/api/suppliers", "/api/khata", "/api/users"]
+    {
+        let (status, body) = call(&app, "GET", uri, Some(&ali), None).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{uri}: {body}");
+    }
+
+    let (status, d) = call(&app, "GET", "/api/dashboard?from=2026-01-01&to=2030-12-31", Some(&owner), None).await;
+    assert_eq!(status, StatusCode::OK, "{d}");
+    assert_eq!(d["figures"]["expenses"], 340_000);
+    let (status, inv) = call(&app, "GET", "/api/inventory?tab=low", Some(&owner), None).await;
+    assert_eq!(status, StatusCode::OK, "{inv}");
+    assert!(inv["rows"].as_array().unwrap().iter().any(|r| r["name"] == "Brufen Syrup 90ml"));
+
+    let (status, e) = call(
+        &app,
+        "POST",
+        "/api/expenses",
+        Some(&owner),
+        Some(json!({ "category": "Tea & food", "amount": 30000, "date": "2026-01-01", "paidFrom": "drawer", "tillCode": "T09" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{e}");
+    assert_eq!(e["reason"], "drawer.no_shift");
+
+    let (status, code) = call(&app, "POST", "/api/recovery-code", Some(&owner), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, body) = call(
+        &app,
+        "POST",
+        "/api/recover",
+        None,
+        Some(json!({ "userId": id_of("Owner"), "code": code["code"], "newPassword": "brand-new-pass" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body["token"].is_string());
+}

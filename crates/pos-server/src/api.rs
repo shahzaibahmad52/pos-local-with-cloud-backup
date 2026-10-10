@@ -9,7 +9,7 @@ use std::{
 use axum::{
     extract::{ConnectInfo, FromRequestParts, Path, Query, State},
     http::{header, request::Parts, HeaderValue, Method},
-    routing::{get, patch, post},
+    routing::{delete, get, patch, post, put},
     Json, Router,
 };
 use rusqlite::Connection;
@@ -19,8 +19,9 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::{
     auth::{self, Auth, User},
+    dashboard,
     error::{AppError, AppResult},
-    products, returns, rules, sales, shifts, store,
+    expenses, import, inventory, khata, products, purchases, returns, rules, sales, settings, shifts, store,
 };
 
 #[derive(Clone)]
@@ -377,6 +378,304 @@ async fn cash_move(
     Ok(Json(shifts::cash_move(&conn, &s.auth, &me.user, &input)?))
 }
 
+async fn dashboard(
+    State(s): State<AppState>,
+    _admin: AdminUser,
+    Query(q): Query<dashboard::Period>,
+) -> AppResult<Json<dashboard::Dashboard>> {
+    let conn = s.db()?;
+    Ok(Json(dashboard::dashboard(&conn, &q)?))
+}
+
+async fn inventory_list(
+    State(s): State<AppState>,
+    _admin: AdminUser,
+    Query(q): Query<inventory::InventoryQuery>,
+) -> AppResult<Json<inventory::InventoryPage>> {
+    let conn = s.db()?;
+    Ok(Json(inventory::list(&conn, &q)?))
+}
+
+async fn inventory_detail(
+    State(s): State<AppState>,
+    _admin: AdminUser,
+    Path(id): Path<String>,
+) -> AppResult<Json<inventory::ProductDetail>> {
+    let conn = s.db()?;
+    Ok(Json(inventory::detail(&conn, &id)?))
+}
+
+async fn update_product(
+    State(s): State<AppState>,
+    AdminUser(admin): AdminUser,
+    Path(id): Path<String>,
+    Json(input): Json<inventory::ProductUpdate>,
+) -> AppResult<Json<inventory::ProductDetail>> {
+    let mut conn = s.db()?;
+    Ok(Json(inventory::update(&mut conn, &admin, &id, &input)?))
+}
+
+async fn adjust_stock(
+    State(s): State<AppState>,
+    AdminUser(admin): AdminUser,
+    Json(input): Json<inventory::AdjustInput>,
+) -> AppResult<Json<inventory::ProductDetail>> {
+    let mut conn = s.db()?;
+    Ok(Json(inventory::adjust(&mut conn, &admin, &input)?))
+}
+
+#[derive(Deserialize)]
+struct ImportInput {
+    rows: Vec<import::ImportRow>,
+    #[serde(default)]
+    commit: bool,
+}
+
+async fn import_products(
+    State(s): State<AppState>,
+    AdminUser(admin): AdminUser,
+    Json(input): Json<ImportInput>,
+) -> AppResult<Json<import::ImportReport>> {
+    let mut conn = s.db()?;
+    Ok(Json(import::run(&mut conn, &admin, &input.rows, input.commit)?))
+}
+
+async fn list_suppliers(State(s): State<AppState>, _admin: AdminUser) -> AppResult<Json<Vec<purchases::SupplierView>>> {
+    let conn = s.db()?;
+    Ok(Json(purchases::suppliers(&conn)?))
+}
+
+async fn create_supplier(
+    State(s): State<AppState>,
+    AdminUser(admin): AdminUser,
+    Json(input): Json<purchases::SupplierInput>,
+) -> AppResult<Json<purchases::SupplierView>> {
+    let conn = s.db()?;
+    Ok(Json(purchases::create_supplier(&conn, &input, &admin)?))
+}
+
+async fn update_supplier(
+    State(s): State<AppState>,
+    AdminUser(admin): AdminUser,
+    Path(id): Path<String>,
+    Json(input): Json<purchases::SupplierInput>,
+) -> AppResult<Json<purchases::SupplierView>> {
+    let conn = s.db()?;
+    Ok(Json(purchases::update_supplier(&conn, &id, &input, &admin)?))
+}
+
+async fn supplier_ledger(
+    State(s): State<AppState>,
+    _admin: AdminUser,
+    Path(id): Path<String>,
+) -> AppResult<Json<Vec<purchases::LedgerLine>>> {
+    let conn = s.db()?;
+    Ok(Json(purchases::supplier_ledger(&conn, &id)?))
+}
+
+async fn pay_supplier(
+    State(s): State<AppState>,
+    AdminUser(admin): AdminUser,
+    Path(id): Path<String>,
+    Json(input): Json<purchases::SupplierPaymentInput>,
+) -> AppResult<Json<purchases::SupplierView>> {
+    let mut conn = s.db()?;
+    Ok(Json(purchases::pay_supplier(&mut conn, &admin, &id, &input)?))
+}
+
+async fn supplier_opening(
+    State(s): State<AppState>,
+    AdminUser(admin): AdminUser,
+    Path(id): Path<String>,
+    Json(input): Json<purchases::OpeningInput>,
+) -> AppResult<Json<purchases::SupplierView>> {
+    let conn = s.db()?;
+    Ok(Json(purchases::add_opening(&conn, &admin, &id, &input)?))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PurchaseQuery {
+    supplier_id: Option<String>,
+}
+
+async fn list_purchases(
+    State(s): State<AppState>,
+    _admin: AdminUser,
+    Query(q): Query<PurchaseQuery>,
+) -> AppResult<Json<Vec<purchases::PurchaseView>>> {
+    let conn = s.db()?;
+    Ok(Json(purchases::purchases(&conn, q.supplier_id.as_deref().filter(|v| !v.is_empty()), 100)?))
+}
+
+async fn receive_purchase(
+    State(s): State<AppState>,
+    AdminUser(admin): AdminUser,
+    Json(input): Json<purchases::PurchaseInput>,
+) -> AppResult<Json<purchases::PurchaseView>> {
+    let mut conn = s.db()?;
+    Ok(Json(purchases::receive(&mut conn, &admin, &input)?))
+}
+
+async fn get_purchase(
+    State(s): State<AppState>,
+    _admin: AdminUser,
+    Path(id): Path<String>,
+) -> AppResult<Json<purchases::PurchaseView>> {
+    let conn = s.db()?;
+    purchases::purchase(&conn, &id)?.map(Json).ok_or_else(|| AppError::NotFound("Purchase not found.".into()))
+}
+
+async fn last_buy(State(s): State<AppState>, _admin: AdminUser, Path(id): Path<String>) -> AppResult<Json<Value>> {
+    let conn = s.db()?;
+    Ok(Json(json!(purchases::last_buy(&conn, &id)?)))
+}
+
+#[derive(Deserialize)]
+struct MonthQuery {
+    month: String,
+}
+
+async fn list_expenses(
+    State(s): State<AppState>,
+    _admin: AdminUser,
+    Query(q): Query<MonthQuery>,
+) -> AppResult<Json<expenses::MonthExpenses>> {
+    let conn = s.db()?;
+    Ok(Json(expenses::month(&conn, &q.month)?))
+}
+
+async fn add_expense(
+    State(s): State<AppState>,
+    AdminUser(admin): AdminUser,
+    Json(input): Json<expenses::ExpenseInput>,
+) -> AppResult<Json<expenses::ExpenseView>> {
+    let mut conn = s.db()?;
+    Ok(Json(expenses::add(&mut conn, &admin, &input)?))
+}
+
+async fn delete_expense(
+    State(s): State<AppState>,
+    AdminUser(admin): AdminUser,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
+    let mut conn = s.db()?;
+    expenses::delete(&mut conn, &admin, &id)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+#[derive(Deserialize)]
+struct KhataQuery {
+    #[serde(default)]
+    q: String,
+    #[serde(default)]
+    tab: String,
+}
+
+async fn khata_list(
+    State(s): State<AppState>,
+    _admin: AdminUser,
+    Query(q): Query<KhataQuery>,
+) -> AppResult<Json<khata::AccountList>> {
+    let conn = s.db()?;
+    Ok(Json(khata::list(&conn, &q.q, &q.tab)?))
+}
+
+async fn khata_statement(
+    State(s): State<AppState>,
+    _admin: AdminUser,
+    Path(id): Path<String>,
+) -> AppResult<Json<khata::Statement>> {
+    let conn = s.db()?;
+    Ok(Json(khata::statement(&conn, &id)?))
+}
+
+async fn khata_payment(
+    State(s): State<AppState>,
+    AdminUser(admin): AdminUser,
+    Path(id): Path<String>,
+    Json(input): Json<khata::PaymentInput>,
+) -> AppResult<Json<khata::PaymentSlip>> {
+    let mut conn = s.db()?;
+    Ok(Json(khata::receive_payment(&mut conn, &admin, &id, &input)?))
+}
+
+async fn khata_opening(
+    State(s): State<AppState>,
+    AdminUser(admin): AdminUser,
+    Path(id): Path<String>,
+    Json(input): Json<khata::OpeningInput>,
+) -> AppResult<Json<khata::Account>> {
+    let conn = s.db()?;
+    Ok(Json(khata::add_opening(&conn, &admin, &id, &input)?))
+}
+
+async fn update_customer(
+    State(s): State<AppState>,
+    AdminUser(admin): AdminUser,
+    Path(id): Path<String>,
+    Json(input): Json<khata::CustomerUpdate>,
+) -> AppResult<Json<khata::Account>> {
+    let conn = s.db()?;
+    Ok(Json(khata::update(&conn, &admin, &id, &input)?))
+}
+
+async fn open_tills(State(s): State<AppState>, _admin: AdminUser) -> AppResult<Json<Vec<shifts::OpenTill>>> {
+    let conn = s.db()?;
+    Ok(Json(shifts::open_tills(&conn)?))
+}
+
+async fn get_settings(State(s): State<AppState>, _admin: AdminUser) -> AppResult<Json<Value>> {
+    let conn = s.db()?;
+    Ok(Json(json!({
+        "store": sales::store_header(&conn)?,
+        "hasRecoveryCode": settings::has_recovery_code(&conn)?,
+        "version": env!("CARGO_PKG_VERSION"),
+    })))
+}
+
+async fn update_store(
+    State(s): State<AppState>,
+    AdminUser(admin): AdminUser,
+    Json(input): Json<settings::StoreInput>,
+) -> AppResult<Json<sales::StoreHeader>> {
+    let mut conn = s.db()?;
+    Ok(Json(settings::update_store(&mut conn, &admin, &input)?))
+}
+
+async fn list_users(State(s): State<AppState>, _admin: AdminUser) -> AppResult<Json<Vec<settings::UserRow>>> {
+    let conn = s.db()?;
+    Ok(Json(settings::users(&conn)?))
+}
+
+async fn update_user(
+    State(s): State<AppState>,
+    AdminUser(admin): AdminUser,
+    Path(id): Path<String>,
+    Json(input): Json<settings::UserUpdate>,
+) -> AppResult<Json<settings::UserRow>> {
+    let conn = s.db()?;
+    Ok(Json(settings::update_user(&conn, &admin, &id, &input)?))
+}
+
+async fn new_recovery_code(State(s): State<AppState>, AdminUser(admin): AdminUser) -> AppResult<Json<Value>> {
+    let conn = s.db()?;
+    Ok(Json(json!({ "code": settings::new_recovery_code(&conn, &admin)? })))
+}
+
+/// Only on the main PC itself: someone on the shop Wi-Fi shouldn't be able to
+/// try recovery codes.
+async fn recover(
+    State(s): State<AppState>,
+    _local: LocalOnly,
+    Json(input): Json<settings::RecoverInput>,
+) -> AppResult<Json<Value>> {
+    let conn = s.db()?;
+    let user = settings::recover(&conn, &s.auth, &input)?;
+    let token = s.auth.start_session(&user.id)?;
+    Ok(Json(json!({ "token": token, "user": user })))
+}
+
 /// Origins allowed to call the API from a browser: the desktop app's own
 /// webview and the local development server. Tills on other PCs use the
 /// same desktop app, so their origin is the app's too.
@@ -390,7 +689,7 @@ fn cors() -> CorsLayer {
                 || o.starts_with(b"http://localhost:")
                 || o.starts_with(b"http://127.0.0.1:")
         }))
-        .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::PUT])
+        .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::PUT, Method::DELETE])
         .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
 }
 
@@ -403,11 +702,38 @@ pub fn router(state: AppState) -> Router {
         .route("/api/logout", post(logout))
         .route("/api/me", get(me))
         .route("/api/me/language", patch(set_language))
-        .route("/api/users", post(create_user))
+        .route("/api/users", get(list_users).post(create_user))
+        .route("/api/users/{id}", put(update_user))
+        .route("/api/settings", get(get_settings))
+        .route("/api/store", put(update_store))
+        .route("/api/recovery-code", post(new_recovery_code))
+        .route("/api/recover", post(recover))
+        .route("/api/dashboard", get(dashboard))
+        .route("/api/inventory", get(inventory_list))
+        .route("/api/inventory/{id}", get(inventory_detail))
         .route("/api/products", post(create_product))
+        .route("/api/products/import", post(import_products))
+        .route("/api/products/{id}", put(update_product))
         .route("/api/products/search", get(search_products))
         .route("/api/products/barcode/{code}", get(product_by_barcode))
         .route("/api/stock/receive", post(receive_stock))
+        .route("/api/stock/adjust", post(adjust_stock))
+        .route("/api/suppliers", get(list_suppliers).post(create_supplier))
+        .route("/api/suppliers/{id}", put(update_supplier))
+        .route("/api/suppliers/{id}/ledger", get(supplier_ledger))
+        .route("/api/suppliers/{id}/payments", post(pay_supplier))
+        .route("/api/suppliers/{id}/opening", post(supplier_opening))
+        .route("/api/purchases", get(list_purchases).post(receive_purchase))
+        .route("/api/purchases/{id}", get(get_purchase))
+        .route("/api/purchases/last-buy/{product_id}", get(last_buy))
+        .route("/api/expenses", get(list_expenses).post(add_expense))
+        .route("/api/expenses/{id}", delete(delete_expense))
+        .route("/api/khata", get(khata_list))
+        .route("/api/khata/{id}", get(khata_statement))
+        .route("/api/khata/{id}/payments", post(khata_payment))
+        .route("/api/khata/{id}/opening", post(khata_opening))
+        .route("/api/customers/{id}", put(update_customer))
+        .route("/api/tills/open", get(open_tills))
         .route("/api/shifts/current", get(current_shift))
         .route("/api/shifts/open", post(open_shift))
         .route("/api/sales", post(create_sale))

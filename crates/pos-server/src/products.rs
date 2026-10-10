@@ -239,6 +239,14 @@ fn default_sell_mode() -> String {
 }
 
 pub fn create_product(conn: &mut Connection, input: &NewProduct, user_id: &str) -> AppResult<ProductView> {
+    let tx = conn.transaction()?;
+    let id = insert_product(&tx, input, user_id)?;
+    tx.commit()?;
+    product_view(conn, &id)?.ok_or_else(|| AppError::Internal("new product not found".into()))
+}
+
+/// Checks and saves a new product inside the caller's transaction. Returns its id.
+pub fn insert_product(tx: &Connection, input: &NewProduct, user_id: &str) -> AppResult<String> {
     let name = input.name.trim();
     if name.is_empty() {
         return Err(AppError::BadRequest("Product name is required.".into()));
@@ -271,7 +279,6 @@ pub fn create_product(conn: &mut Connection, input: &NewProduct, user_id: &str) 
         _ => return Err(AppError::BadRequest("Sell mode must be unit or weight.".into())),
     }
 
-    let tx = conn.transaction()?;
     let id = db::new_id();
     let now = db::now();
     let base_unit = if input.sell_mode == "weight" { "g" } else { input.base_unit.trim() };
@@ -328,10 +335,9 @@ pub fn create_product(conn: &mut Connection, input: &NewProduct, user_id: &str) 
         }
         tx.execute("INSERT INTO barcodes (code, product_id, unit_id) VALUES (?1, ?2, ?3)", params![code, id, unit_id])?;
     }
-    db::audit(&tx, Some(user_id), None, "product.create", &json!({ "productId": id, "name": name }), None)?;
-    db::outbox(&tx, "product", &id, "upsert", &json!({ "id": id, "name": name }))?;
-    tx.commit()?;
-    product_view(conn, &id)?.ok_or_else(|| AppError::Internal("new product not found".into()))
+    db::audit(tx, Some(user_id), None, "product.create", &json!({ "productId": id, "name": name }), None)?;
+    db::outbox(tx, "product", &id, "upsert", &json!({ "id": id, "name": name }))?;
+    Ok(id)
 }
 
 #[derive(Debug, Deserialize)]
@@ -376,6 +382,14 @@ pub fn valid_month(s: &str) -> bool {
 
 /// Adds stock to a batch (creating the batch if it is new).
 pub fn receive_stock(conn: &mut Connection, input: &ReceiveStock, user_id: &str) -> AppResult<ProductView> {
+    let tx = conn.transaction()?;
+    insert_stock(&tx, input, user_id)?;
+    tx.commit()?;
+    product_view(conn, &input.product_id)?.ok_or_else(|| AppError::Internal("product vanished".into()))
+}
+
+/// Adds stock inside the caller's transaction.
+pub fn insert_stock(tx: &Connection, input: &ReceiveStock, user_id: &str) -> AppResult<()> {
     if input.base_qty <= 0 {
         return Err(AppError::BadRequest("Quantity must be more than 0.".into()));
     }
@@ -395,7 +409,6 @@ pub fn receive_stock(conn: &mut Connection, input: &ReceiveStock, user_id: &str)
         return Err(AppError::BadRequest("Batch number is required (use \"-\" if the pack has none).".into()));
     }
 
-    let tx = conn.transaction()?;
     let exists: bool = tx
         .query_row("SELECT 1 FROM products WHERE id = ?1 AND active = 1", [&input.product_id], |_| Ok(()))
         .optional()?
@@ -449,14 +462,13 @@ pub fn receive_stock(conn: &mut Connection, input: &ReceiveStock, user_id: &str)
         params![db::new_id(), input.product_id, batch_id, input.base_qty, input.reason, user_id, db::now()],
     )?;
     db::outbox(
-        &tx,
+        tx,
         "stock",
         &batch_id,
         "receive",
         &json!({ "productId": input.product_id, "batchId": batch_id, "qty": input.base_qty }),
     )?;
-    tx.commit()?;
-    product_view(conn, &input.product_id)?.ok_or_else(|| AppError::Internal("product vanished".into()))
+    Ok(())
 }
 
 #[cfg(test)]

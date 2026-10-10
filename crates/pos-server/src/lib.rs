@@ -7,14 +7,22 @@
 
 pub mod api;
 pub mod auth;
+pub mod dashboard;
 pub mod db;
 pub mod error;
+pub mod expenses;
+pub mod import;
+pub mod inventory;
+pub mod khata;
+pub mod ledger;
 pub mod pricing;
 pub mod products;
+pub mod purchases;
 pub mod returns;
 pub mod rules;
 pub mod sales;
 pub mod seed;
+pub mod settings;
 pub mod shifts;
 pub mod store;
 

@@ -260,6 +260,64 @@ pub struct CashMoveInput {
     pub approval: Option<Approval>,
 }
 
+/// The open shift on a till; money paid from or into its drawer is recorded there.
+pub fn open_shift_id(conn: &Connection, till_code: &str) -> AppResult<String> {
+    conn.query_row("SELECT id FROM shifts WHERE till_code = ?1 AND status = 'open'", [till_code], |r| r.get(0))
+        .optional()?
+        .ok_or_else(|| {
+            AppError::Conflict(format!("Till {till_code} has no open shift, so its drawer can't be used."))
+                .because("drawer.no_shift", json!({ "till": till_code }))
+        })
+}
+
+/// Records cash going into or out of a drawer, so the shift's expected cash
+/// includes it. Returns the cash move's id.
+pub fn insert_cash_move(
+    conn: &Connection,
+    shift_id: &str,
+    user_id: &str,
+    kind: &str,
+    amount: i64,
+    reason: &str,
+    approved_by: Option<&str>,
+) -> AppResult<String> {
+    let id = db::new_id();
+    conn.execute(
+        "INSERT INTO cash_moves (id, shift_id, user_id, kind, amount, reason, approved_by, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![id, shift_id, user_id, kind, amount, reason, approved_by, db::now()],
+    )?;
+    db::outbox(conn, "cash_move", &id, "create", &json!({ "shiftId": shift_id, "kind": kind, "amount": amount }))?;
+    Ok(id)
+}
+
+/// Where money for a purchase, expense or khata payment came from or went to.
+pub const MONEY_SOURCES: &[&str] = &["drawer", "owner", "bank", "wallet"];
+
+/// Moves cash in or out of a till's drawer when `source` is the drawer, so
+/// the shift's expected cash stays right. Other sources leave the drawer alone.
+pub fn move_money(
+    conn: &Connection,
+    source: &str,
+    till_code: Option<&str>,
+    user_id: &str,
+    kind: &str,
+    amount: i64,
+    reason: &str,
+) -> AppResult<Option<String>> {
+    if !MONEY_SOURCES.contains(&source) {
+        return Err(AppError::BadRequest("Choose where the money is paid from: drawer, owner, bank or wallet.".into()));
+    }
+    if source != "drawer" || amount == 0 {
+        return Ok(None);
+    }
+    let till = till_code.filter(|t| !t.trim().is_empty()).ok_or_else(|| {
+        AppError::BadRequest("Choose which till's drawer the cash is from.".into()).because("drawer.no_till", json!({}))
+    })?;
+    let shift_id = open_shift_id(conn, till)?;
+    Ok(Some(insert_cash_move(conn, &shift_id, user_id, kind, amount, reason, None)?))
+}
+
 pub fn cash_move(conn: &Connection, auth: &Auth, user: &User, input: &CashMoveInput) -> AppResult<ShiftSummary> {
     if !matches!(input.kind.as_str(), "in" | "out") {
         return Err(AppError::BadRequest("Kind must be in or out.".into()));
@@ -272,29 +330,20 @@ pub fn cash_move(conn: &Connection, auth: &Auth, user: &User, input: &CashMoveIn
             AppError::BadRequest("Write what the cash is for.".into()).because("cash.reason_required", json!({}))
         );
     }
-    let shift_id: String = conn
-        .query_row("SELECT id FROM shifts WHERE till_code = ?1 AND status = 'open'", [&input.till_code], |r| r.get(0))
-        .optional()?
-        .ok_or_else(|| AppError::Conflict("Open a shift first.".into()))?;
+    let shift_id = open_shift_id(conn, &input.till_code)?;
     let approver = auth.approver(conn, input.approval.as_ref())?;
     if input.kind == "out" && rules::load(conn)?.cash_out && approver.is_none() && !user.is_admin() {
         return Err(AppError::ApprovalRequired("Taking cash out needs a manager PIN.".into())
             .because("approval.cash_out", json!({})));
     }
-    let id = db::new_id();
-    conn.execute(
-        "INSERT INTO cash_moves (id, shift_id, user_id, kind, amount, reason, approved_by, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-        params![
-            id,
-            shift_id,
-            user.id,
-            input.kind,
-            input.amount,
-            input.reason.trim(),
-            approver.as_ref().map(|a| a.id.as_str()),
-            db::now()
-        ],
+    insert_cash_move(
+        conn,
+        &shift_id,
+        &user.id,
+        &input.kind,
+        input.amount,
+        input.reason.trim(),
+        approver.as_ref().map(|a| a.id.as_str()),
     )?;
     db::audit(
         conn,
@@ -304,12 +353,24 @@ pub fn cash_move(conn: &Connection, auth: &Auth, user: &User, input: &CashMoveIn
         &json!({ "amount": input.amount, "reason": input.reason.trim() }),
         approver.as_ref().map(|a| a.id.as_str()),
     )?;
-    db::outbox(
-        conn,
-        "cash_move",
-        &id,
-        "create",
-        &json!({ "shiftId": shift_id, "kind": input.kind, "amount": input.amount }),
-    )?;
     summary(conn, &shift_id, user.is_admin())
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenTill {
+    pub till_code: String,
+    pub cashier_name: String,
+}
+
+/// Tills with an open shift: the drawers money can be paid from right now.
+pub fn open_tills(conn: &Connection) -> AppResult<Vec<OpenTill>> {
+    let mut stmt = conn.prepare(
+        "SELECT s.till_code, u.name FROM shifts s JOIN users u ON u.id = s.user_id
+         WHERE s.status = 'open' ORDER BY s.till_code",
+    )?;
+    let rows = stmt
+        .query_map([], |r| Ok(OpenTill { till_code: r.get(0)?, cashier_name: r.get(1)? }))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
 }

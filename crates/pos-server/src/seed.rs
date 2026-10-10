@@ -7,7 +7,11 @@ use crate::{
     auth::User,
     db,
     error::AppResult,
+    expenses::{self, ExpenseInput},
+    khata::{self, OpeningInput},
+    ledger,
     products::{self, NewBarcode, NewProduct, NewUnit, ReceiveStock, UnitPrice},
+    purchases::{self, PurchaseInput, PurchaseLineInput, SupplierInput},
     store::{self, NewCustomer, NewUser, SetupInput},
 };
 
@@ -136,6 +140,7 @@ pub fn demo(conn: &mut Connection) -> AppResult<bool> {
     );
     augmentin.rx_required = true;
     augmentin.rack = Some("C1".into());
+    augmentin.reorder_level = 60;
     let augmentin = products::create_product(conn, &augmentin, &owner.id)?;
     receive(conn, &owner, &augmentin.id, "AG-118", Some("2026-12"), 84, 5_867, vec![])?;
 
@@ -152,6 +157,7 @@ pub fn demo(conn: &mut Connection) -> AppResult<bool> {
 
     let mut brufen = medicine("Brufen Syrup 90ml", "Ibuprofen", "Abbott", "btl", vec![unit("Bottle", "بوتل", 1, 150)]);
     brufen.rack = Some("D4".into());
+    brufen.reorder_level = 24;
     let brufen = products::create_product(conn, &brufen, &owner.id)?;
     receive(conn, &owner, &brufen.id, "BF-031", Some("2028-02"), 22, 12_500, vec![])?;
 
@@ -250,7 +256,7 @@ pub fn demo(conn: &mut Connection) -> AppResult<bool> {
         },
         &owner,
     )?;
-    store::create_customer(
+    let rasheed = store::create_customer(
         conn,
         &NewCustomer {
             name: "Haji Rasheed".into(),
@@ -259,6 +265,57 @@ pub fn demo(conn: &mut Connection) -> AppResult<bool> {
             receipt_language: Some("ur".into()),
         },
         &owner,
+    )?;
+    khata::add_opening(conn, &owner, &rasheed.id, &OpeningInput { amount: 420_000, note: None })?;
+
+    let distributor = purchases::create_supplier(
+        conn,
+        &SupplierInput { name: "Distributor A".into(), phone: None, notes: None, terms_days: 30 },
+        &owner,
+    )?;
+    purchases::create_supplier(
+        conn,
+        &SupplierInput { name: "Grocery wholesaler".into(), phone: None, notes: None, terms_days: 0 },
+        &owner,
+    )?;
+    let soap_box = soap.units.iter().find(|u| u.name == "Box").map(|u| u.id.clone());
+    purchases::receive(
+        conn,
+        &owner,
+        &PurchaseInput {
+            supplier_id: distributor.id,
+            invoice_no: Some("INV-55120".into()),
+            invoice_date: ledger::today(),
+            terms_days: 30,
+            freight: 0,
+            paid_now: 0,
+            paid_from: "owner".into(),
+            till_code: None,
+            lines: vec![PurchaseLineInput {
+                product_id: soap.id.clone(),
+                unit_id: soap_box,
+                batch_no: String::new(),
+                expiry: None,
+                qty: 4,
+                bonus: 0,
+                trade_price: 60_000,
+                disc_bp: 200,
+                sale_price: None,
+            }],
+            client_ref: None,
+        },
+    )?;
+    expenses::add(
+        conn,
+        &owner,
+        &ExpenseInput {
+            category: "Generator fuel".into(),
+            amount: 340_000,
+            date: ledger::today(),
+            paid_from: "owner".into(),
+            till_code: None,
+            note: Some("Petrol 12 L".into()),
+        },
     )?;
     Ok(true)
 }

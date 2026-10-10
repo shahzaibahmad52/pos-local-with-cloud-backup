@@ -4,8 +4,11 @@ use rusqlite::{Connection, OptionalExtension};
 
 /// Schema migrations, applied in order. `PRAGMA user_version` records how
 /// many have run, so each runs exactly once per database.
-const MIGRATIONS: &[&str] =
-    &[include_str!("../migrations/001_init.sql"), include_str!("../migrations/002_returns_shifts.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("../migrations/001_init.sql"),
+    include_str!("../migrations/002_returns_shifts.sql"),
+    include_str!("../migrations/003_backoffice.sql"),
+];
 
 pub fn open(path: &Path) -> rusqlite::Result<Connection> {
     let conn = Connection::open(path)?;

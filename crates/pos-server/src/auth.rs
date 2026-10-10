@@ -27,6 +27,20 @@ pub fn hash_secret(secret: &str) -> String {
         .to_string()
 }
 
+/// A cashier PIN is exactly 4 digits; an admin password at least 8 characters.
+pub fn check_secret_rules(role: &str, secret: &str) -> AppResult<()> {
+    match role {
+        "cashier" if secret.len() != 4 || !secret.chars().all(|c| c.is_ascii_digit()) => {
+            Err(AppError::BadRequest("A cashier PIN must be exactly 4 digits.".into()))
+        }
+        "admin" if secret.chars().count() < 8 => {
+            Err(AppError::BadRequest("An admin password must be at least 8 characters.".into()))
+        }
+        "cashier" | "admin" => Ok(()),
+        _ => Err(AppError::BadRequest("Role must be admin or cashier.".into())),
+    }
+}
+
 pub fn verify_secret(secret: &str, hash: &str) -> bool {
     PasswordHash::new(hash)
         .map(|parsed| Argon2::default().verify_password(secret.as_bytes(), &parsed).is_ok())
@@ -102,9 +116,17 @@ impl Auth {
     /// Checks a PIN or password, with a lockout after repeated failures so a
     /// 4-digit PIN can't be guessed by trying them all.
     pub fn check_secret(&self, conn: &Connection, user_id: &str, secret: &str) -> AppResult<User> {
+        let hash = load_secret_hash(conn, user_id)?;
+        self.check_code(conn, user_id, hash.as_deref(), secret)?;
+        load_user(conn, user_id)?.ok_or(AppError::Unauthorized)
+    }
+
+    /// Checks `secret` against `hash` under the lockout for `key` (a user id,
+    /// or a name for codes that belong to no user).
+    pub fn check_code(&self, conn: &Connection, key: &str, hash: Option<&str>, secret: &str) -> AppResult<()> {
         {
             let attempts = self.attempts.lock().map_err(poisoned)?;
-            if let Some(Attempts { locked_until: Some(until), .. }) = attempts.get(user_id) {
+            if let Some(Attempts { locked_until: Some(until), .. }) = attempts.get(key) {
                 if *until > Instant::now() {
                     let mins = (*until - Instant::now()).as_secs() / 60 + 1;
                     return Err(AppError::Locked(format!("Too many wrong tries. Try again in {mins} min."))
@@ -113,22 +135,24 @@ impl Auth {
             }
         }
 
-        let hash = load_secret_hash(conn, user_id)?;
-        let ok = hash.as_deref().is_some_and(|h| verify_secret(secret, h));
+        let ok = hash.is_some_and(|h| verify_secret(secret, h));
 
         let mut attempts = self.attempts.lock().map_err(poisoned)?;
         if ok {
-            attempts.remove(user_id);
-            return load_user(conn, user_id)?.ok_or(AppError::Unauthorized);
+            attempts.remove(key);
+            return Ok(());
         }
-        let entry = attempts.entry(user_id.to_string()).or_default();
+        let entry = attempts.entry(key.to_string()).or_default();
         entry.failures += 1;
         if entry.failures >= MAX_FAILED_ATTEMPTS {
             entry.failures = 0;
             entry.locked_until = Some(Instant::now() + LOCKOUT);
-            if load_user(conn, user_id)?.is_some() {
-                crate::db::audit(conn, Some(user_id), None, "auth.locked", &json!({ "minutes": 5 }), None)?;
-            }
+            let user = load_user(conn, key)?.map(|u| u.id);
+            let details = match user {
+                Some(_) => json!({ "minutes": 5 }),
+                None => json!({ "minutes": 5, "what": key }),
+            };
+            crate::db::audit(conn, user.as_deref(), None, "auth.locked", &details, None)?;
             return Err(AppError::Locked("Too many wrong tries. Locked for 5 minutes.".into())
                 .because("auth.locked", json!({ "minutes": 5 })));
         }

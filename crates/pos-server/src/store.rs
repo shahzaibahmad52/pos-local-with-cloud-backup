@@ -105,19 +105,7 @@ fn default_language() -> String {
 }
 
 pub fn create_user(conn: &Connection, input: &NewUser, by: &User) -> AppResult<User> {
-    match input.role.as_str() {
-        "cashier" => {
-            if input.secret.len() != 4 || !input.secret.chars().all(|c| c.is_ascii_digit()) {
-                return Err(AppError::BadRequest("A cashier PIN must be exactly 4 digits.".into()));
-            }
-        }
-        "admin" => {
-            if input.secret.chars().count() < 8 {
-                return Err(AppError::BadRequest("An admin password must be at least 8 characters.".into()));
-            }
-        }
-        _ => return Err(AppError::BadRequest("Role must be admin or cashier.".into())),
-    }
+    auth::check_secret_rules(&input.role, &input.secret)?;
     if !matches!(input.language.as_str(), "en" | "ur") {
         return Err(AppError::BadRequest("Language must be en or ur.".into()));
     }
@@ -220,7 +208,7 @@ pub fn customers(conn: &Connection, query: &str) -> AppResult<Vec<CustomerView>>
     let like = format!("%{}%", query.trim());
     let mut stmt = conn.prepare(
         "SELECT id, name, phone, credit_limit, receipt_language FROM customers
-         WHERE name LIKE ?1 OR phone LIKE ?1 ORDER BY name COLLATE NOCASE LIMIT 50",
+         WHERE active = 1 AND (name LIKE ?1 OR phone LIKE ?1) ORDER BY name COLLATE NOCASE LIMIT 50",
     )?;
     let rows = stmt
         .query_map([like], |r| {
