@@ -1,0 +1,277 @@
+//! End-to-end sale rules against the demo store.
+
+use pos_server::{
+    auth::{self, Auth, User},
+    db,
+    error::AppError,
+    products::{self, ProductView},
+    sales::{self, Approval, PaymentInput, SaleInput, SaleLineInput},
+    seed,
+};
+use rusqlite::Connection;
+
+fn store() -> Connection {
+    let mut conn = db::open_in_memory().unwrap();
+    assert!(seed::demo(&mut conn).unwrap());
+    conn
+}
+
+fn user(conn: &Connection, name: &str) -> User {
+    let id: String = conn.query_row("SELECT id FROM users WHERE name = ?1", [name], |r| r.get(0)).unwrap();
+    auth::load_user(conn, &id).unwrap().unwrap()
+}
+
+fn product(conn: &Connection, name: &str) -> ProductView {
+    products::search(conn, name, 5).unwrap().into_iter().next().expect(name)
+}
+
+fn unit_id(p: &ProductView, name: &str) -> String {
+    p.units.iter().find(|u| u.name == name).unwrap().id.clone()
+}
+
+fn units_line(p: &ProductView, unit: &str, qty: i64) -> SaleLineInput {
+    SaleLineInput {
+        product_id: p.id.clone(),
+        unit_id: Some(unit_id(p, unit)),
+        qty: Some(qty),
+        grams: None,
+        amount: None,
+    }
+}
+
+fn cash(amount: i64) -> Vec<PaymentInput> {
+    vec![PaymentInput { method: "cash".into(), amount }]
+}
+
+fn sale(lines: Vec<SaleLineInput>, payments: Vec<PaymentInput>) -> SaleInput {
+    SaleInput {
+        till_code: "T01".into(),
+        customer_id: None,
+        lines,
+        discount_bp: 0,
+        payments,
+        client_ref: None,
+        approval: None,
+    }
+}
+
+fn batch_qty(conn: &Connection, batch_no: &str) -> i64 {
+    conn.query_row("SELECT qty_on_hand FROM batches WHERE batch_no = ?1", [batch_no], |r| r.get(0)).unwrap()
+}
+
+#[test]
+fn sells_from_the_earliest_expiry_batch() {
+    let mut conn = store();
+    let ali = user(&conn, "Ali");
+    let panadol = product(&conn, "Panadol");
+    assert_eq!(panadol.stock_base, 1_240);
+    assert_eq!(panadol.next_batch_no.as_deref(), Some("B-2291"));
+
+    let r = sales::create_sale(
+        &mut conn,
+        &Auth::default(),
+        &ali,
+        &sale(vec![units_line(&panadol, "Strip", 3)], cash(10_000)),
+    )
+    .unwrap();
+    assert_eq!(r.receipt_no, "B1-T01-000001");
+    assert_eq!(r.total, 9_000);
+    assert_eq!(r.change_due, 1_000);
+    assert_eq!(r.lines[0].batch_no.as_deref(), Some("B-2291"));
+    assert_eq!(batch_qty(&conn, "B-2291"), 970);
+    assert_eq!(batch_qty(&conn, "B-2310"), 240);
+    // Cash is recorded as what stayed in the drawer.
+    assert_eq!(r.payments[0].amount, 9_000);
+}
+
+#[test]
+fn new_batch_price_applies_once_old_stock_is_gone() {
+    let mut conn = store();
+    let ali = user(&conn, "Ali");
+    let panadol = product(&conn, "Panadol");
+    // 5 boxes = 1,000 tablets = all of batch B-2291.
+    sales::create_sale(&mut conn, &Auth::default(), &ali, &sale(vec![units_line(&panadol, "Box", 5)], cash(295_000)))
+        .unwrap();
+    assert_eq!(batch_qty(&conn, "B-2291"), 0);
+
+    let panadol = product(&conn, "Panadol");
+    assert_eq!(panadol.next_batch_no.as_deref(), Some("B-2310"));
+    let strip = panadol.units.iter().find(|u| u.name == "Strip").unwrap();
+    assert_eq!(strip.price, 3_300, "batch B-2310 is printed Rs 33 per strip");
+    let r = sales::create_sale(
+        &mut conn,
+        &Auth::default(),
+        &ali,
+        &sale(vec![units_line(&panadol, "Strip", 1)], cash(3_300)),
+    )
+    .unwrap();
+    assert_eq!(r.total, 3_300);
+    assert_eq!(r.receipt_no, "B1-T01-000002");
+}
+
+#[test]
+fn expired_stock_is_never_sold() {
+    let mut conn = store();
+    let ali = user(&conn, "Ali");
+    let flagyl = product(&conn, "Flagyl");
+    assert_eq!(flagyl.stock_base, 120, "the expired FG-100 batch is not counted");
+    let err = sales::create_sale(
+        &mut conn,
+        &Auth::default(),
+        &ali,
+        &sale(vec![units_line(&flagyl, "Strip", 13)], cash(100_000)),
+    )
+    .unwrap_err();
+    match err {
+        AppError::Stock(msg) => assert!(msg.contains("expired"), "{msg}"),
+        other => panic!("expected stock error, got {other:?}"),
+    }
+    assert_eq!(batch_qty(&conn, "FG-100"), 50);
+    assert_eq!(batch_qty(&conn, "FG-209"), 120);
+}
+
+#[test]
+fn two_lines_of_one_product_cannot_oversell() {
+    let mut conn = store();
+    let ali = user(&conn, "Ali");
+    let aug = product(&conn, "Augmentin");
+    assert_eq!(aug.stock_base, 84);
+    let lines = vec![units_line(&aug, "Strip", 14), units_line(&aug, "Tab", 1)];
+    let err = sales::create_sale(&mut conn, &Auth::default(), &ali, &sale(lines, cash(1_000_000))).unwrap_err();
+    assert!(matches!(err, AppError::Stock(_)), "{err:?}");
+    assert_eq!(batch_qty(&conn, "AG-118"), 84, "nothing is taken when the sale fails");
+}
+
+#[test]
+fn sugar_by_amount_or_by_weight() {
+    let mut conn = store();
+    let ali = user(&conn, "Ali");
+    let sugar = product(&conn, "Sugar");
+    let by_amount =
+        SaleLineInput { product_id: sugar.id.clone(), unit_id: None, qty: None, grams: None, amount: Some(1_000) };
+    let by_weight =
+        SaleLineInput { product_id: sugar.id.clone(), unit_id: None, qty: None, grams: Some(250), amount: None };
+    let r =
+        sales::create_sale(&mut conn, &Auth::default(), &ali, &sale(vec![by_amount, by_weight], cash(5_000))).unwrap();
+    assert_eq!(r.lines[0].qty, 63); // Rs 10 at Rs 160/kg
+    assert_eq!(r.lines[0].line_total, 1_000);
+    assert_eq!(r.lines[1].line_total, 4_000); // 250 g
+    assert_eq!(r.total, 5_000);
+    assert_eq!(r.item_count, 2);
+    assert_eq!(product(&conn, "Sugar").stock_base, 38_500 - 63 - 250);
+}
+
+#[test]
+fn included_sales_tax_is_reported() {
+    let mut conn = store();
+    let ali = user(&conn, "Ali");
+    let milk = product(&conn, "Olper");
+    let r =
+        sales::create_sale(&mut conn, &Auth::default(), &ali, &sale(vec![units_line(&milk, "Pack", 2)], cash(66_000)))
+            .unwrap();
+    assert_eq!(r.total, 66_000);
+    assert_eq!(r.tax_included, 10_068);
+}
+
+#[test]
+fn big_discount_needs_a_manager_pin() {
+    let mut conn = store();
+    let auth = Auth::default();
+    let ali = user(&conn, "Ali");
+    let sana = user(&conn, "Sana");
+    let risek = product(&conn, "Risek");
+
+    let mut input = sale(vec![units_line(&risek, "Strip", 1)], cash(36_000));
+    input.discount_bp = 1_500;
+    let err = sales::create_sale(&mut conn, &auth, &ali, &input).unwrap_err();
+    assert!(matches!(err, AppError::ApprovalRequired(_)), "{err:?}");
+
+    input.approval = Some(Approval { user_id: sana.id.clone(), secret: "0000".into() });
+    assert!(matches!(sales::create_sale(&mut conn, &auth, &ali, &input).unwrap_err(), AppError::Forbidden(_)));
+
+    input.approval = Some(Approval { user_id: sana.id.clone(), secret: "2345".into() });
+    let r = sales::create_sale(&mut conn, &auth, &ali, &input).unwrap();
+    assert_eq!(r.discount, 5_400);
+    assert_eq!(r.total, 30_600);
+    let approved_by: String =
+        conn.query_row("SELECT approved_by FROM audit_log WHERE action = 'sale.approved'", [], |r| r.get(0)).unwrap();
+    assert_eq!(approved_by, sana.id);
+
+    // A 5% discount is within the cashier's own limit.
+    let mut small = sale(vec![units_line(&risek, "Strip", 1)], cash(36_000));
+    small.discount_bp = 500;
+    assert!(sales::create_sale(&mut conn, &auth, &ali, &small).is_ok());
+}
+
+#[test]
+fn khata_needs_a_customer_and_respects_the_limit() {
+    let mut conn = store();
+    let auth = Auth::default();
+    let ali = user(&conn, "Ali");
+    let brufen = product(&conn, "Brufen");
+    let imran: String = conn.query_row("SELECT id FROM customers WHERE name = 'Mr. Imran'", [], |r| r.get(0)).unwrap();
+    let khata = |amount| vec![PaymentInput { method: "khata".into(), amount }];
+
+    let err = sales::create_sale(&mut conn, &auth, &ali, &sale(vec![units_line(&brufen, "Bottle", 1)], khata(15_000)))
+        .unwrap_err();
+    assert!(matches!(err, AppError::BadRequest(_)), "{err:?}");
+
+    let mut input = sale(vec![units_line(&brufen, "Bottle", 2)], khata(30_000));
+    input.customer_id = Some(imran.clone());
+    let r = sales::create_sale(&mut conn, &auth, &ali, &input).unwrap();
+    assert_eq!(r.khata_balance, Some(30_000));
+    assert_eq!(r.customer_name.as_deref(), Some("Mr. Imran"));
+
+    // Limit is Rs 10,000. Rs 300 owed + Rs 9,780 more = Rs 10,080, over it.
+    let aug = product(&conn, "Augmentin");
+    let panadol = product(&conn, "Panadol");
+    let risek = product(&conn, "Risek");
+    let lines = vec![units_line(&aug, "Strip", 14), units_line(&panadol, "Box", 6), units_line(&risek, "Strip", 1)];
+    let mut over = sale(lines, khata(978_000));
+    over.customer_id = Some(imran.clone());
+    let err = sales::create_sale(&mut conn, &auth, &ali, &over).unwrap_err();
+    assert!(matches!(err, AppError::ApprovalRequired(_)), "{err:?}");
+
+    // The owner can allow it.
+    let owner = user(&conn, "Owner");
+    let r = sales::create_sale(&mut conn, &auth, &owner, &over).unwrap();
+    assert_eq!(r.khata_balance, Some(1_008_000));
+}
+
+#[test]
+fn payments_must_cover_the_total_and_only_cash_gives_change() {
+    let mut conn = store();
+    let auth = Auth::default();
+    let ali = user(&conn, "Ali");
+    let brufen = product(&conn, "Brufen");
+    let short = sale(vec![units_line(&brufen, "Bottle", 1)], cash(10_000));
+    assert!(matches!(sales::create_sale(&mut conn, &auth, &ali, &short).unwrap_err(), AppError::BadRequest(_)));
+    let card_over =
+        sale(vec![units_line(&brufen, "Bottle", 1)], vec![PaymentInput { method: "card".into(), amount: 20_000 }]);
+    assert!(matches!(sales::create_sale(&mut conn, &auth, &ali, &card_over).unwrap_err(), AppError::BadRequest(_)));
+    let split = sale(
+        vec![units_line(&brufen, "Bottle", 1)],
+        vec![
+            PaymentInput { method: "jazzcash".into(), amount: 10_000 },
+            PaymentInput { method: "cash".into(), amount: 10_000 },
+        ],
+    );
+    let r = sales::create_sale(&mut conn, &auth, &ali, &split).unwrap();
+    assert_eq!(r.change_due, 5_000);
+}
+
+#[test]
+fn retrying_with_the_same_client_ref_does_not_double_sell() {
+    let mut conn = store();
+    let auth = Auth::default();
+    let ali = user(&conn, "Ali");
+    let brufen = product(&conn, "Brufen");
+    let mut input = sale(vec![units_line(&brufen, "Bottle", 1)], cash(15_000));
+    input.client_ref = Some("till-T01-abc".into());
+    let first = sales::create_sale(&mut conn, &auth, &ali, &input).unwrap();
+    let again = sales::create_sale(&mut conn, &auth, &ali, &input).unwrap();
+    assert_eq!(first.id, again.id);
+    assert_eq!(batch_qty(&conn, "BF-031"), 21);
+    let outbox: i64 = conn.query_row("SELECT COUNT(*) FROM outbox WHERE entity = 'sale'", [], |r| r.get(0)).unwrap();
+    assert_eq!(outbox, 1);
+}

@@ -1,0 +1,30 @@
+[package]
+name = "pos-server"
+version = "0.1.0"
+edition = "2021"
+description = "Store server for the medical & general store POS: SQLite database, sale logic and the local network API used by every till."
+
+[lib]
+name = "pos_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pos-server"
+path = "src/main.rs"
+
+[dependencies]
+argon2 = "0.5"
+password-hash = { version = "0.5", features = ["getrandom"] }
+axum = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
+tower-http = { version = "0.6", features = ["cors"] }
+uuid = { version = "1", features = ["v4", "v7"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

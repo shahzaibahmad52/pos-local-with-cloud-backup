@@ -1,0 +1,9 @@
+node_modules/
+dist/
+target/
+.dev/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+src-tauri/gen/
+.DS_Store

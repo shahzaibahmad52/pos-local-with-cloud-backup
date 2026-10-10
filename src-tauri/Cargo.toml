@@ -1,0 +1,18 @@
+[package]
+name = "medstore-pos"
+version = "0.1.0"
+description = "Medical & general store POS — desktop app"
+edition = "2021"
+
+[lib]
+name = "medstore_pos_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+pos-server = { path = "../crates/pos-server" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }
