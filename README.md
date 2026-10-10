@@ -6,6 +6,33 @@ UI design (all screens): https://claude.ai/artifact/DdLH1Rp4aDxSGTM2m2EKUz
 
 ## What works now
 
+### Milestone 3: backoffice (owner / admin only)
+
+The owner signs in to the **backoffice**; cashiers go straight to the till. The owner can open the till from the backoffice and come back with the **Backoffice** button in the till header.
+
+- **Dashboard:** sales after refunds, gross profit (sales tax and cost of goods taken off), expenses and net profit for today, the last 7 days or this month. Also a 14-day sales chart, how customers paid, khata to collect, what is owed to suppliers, low stock and batches expiring within 90 days.
+- **Inventory:**
+  - Every product with stock (counted in strips, boxes or kg), average cost, sale price, next expiry and stock value at cost.
+  - Filters for low stock, expiring soon, expired stock on the shelf, medicines, general items and archived products; search by name, formula, company or barcode.
+  - Each product's batches with cost and printed prices, and a **Correct** button for breakage, expired stock thrown away, loss or a recount. Every correction goes into the activity log.
+- **Add / edit product:** pack levels and prices, Urdu pack names, barcodes (or an in-store barcode), tax, Rx / controlled / fridge flags, reorder level, price per kg for loose items, and opening stock for a new product. Archived products disappear from the till but keep their history.
+- **Import from Excel:** download the template, fill one row per product, choose the file and check the preview (new / price update / needs fixing) before importing. Rows with problems can be downloaded with the reason next to each.
+- **Purchases (GRN):**
+  - Scan or search products onto the purchase. The last trade price is filled in.
+  - Batch, expiry, qty, **bonus** (free packs), trade price, discount and MRP per line. Freight is spread over the lines, so each batch's cost includes bonus units and freight.
+  - The MRP becomes that batch's printed price at the till.
+  - Paid now from the owner's cash, bank, wallet or a till's drawer; the rest goes on the supplier's account with a due date.
+  - Purchase history with every line.
+- **Suppliers & payables:** balances, due dates, overdue flags, a ledger per supplier, payments and old balances carried over from before the app.
+- **Expenses:** electricity, generator fuel, rent, salaries, etc. with a monthly total per category and Excel export. Paid from a till's drawer, an expense counts in that shift's cash.
+- **Customers & khata:**
+  - Balances with ageing (days since the oldest unpaid bill), overdue and near-limit counts, money collected this month.
+  - Ledger with running balance; receive a payment (cash can go into a till's drawer) and print a payment slip; print an 80 mm statement.
+  - **WhatsApp reminder** opens WhatsApp with the message typed in the customer's language; you press Send, so it's free.
+  - Old balances from the paper register, credit limit, receipt language.
+- **Store, users & settings:** store details and receipt footer in English and Urdu, default receipt language, adding and editing users (PIN / password reset, approver, language, switch off), and the **owner recovery code** for a forgotten password (sign-in screen › Forgot password?, main PC only).
+- **Paid add-ons** (SMS OTP, automatic WhatsApp, FBR) are shown switched off with the free option in use, ready to connect when you choose a provider.
+
 ### Milestone 2: daily control
 
 - **Returns / refunds** (<kbd>F9</kbd>):
@@ -55,7 +82,7 @@ UI design (all screens): https://claude.ai/artifact/DdLH1Rp4aDxSGTM2m2EKUz
 - **Desktop app** (`src-tauri`, Tauri 2):
   - On first start you choose whether the PC is the **main PC** (it runs the store server and database) or an **extra till** (it connects to the main PC's address).
 
-Not built yet: backoffice screens, stock count, transfers, reports, cloud sync. See the roadmap below.
+Not built yet: stock count, transfers, full reports, cloud sync. See the roadmap below.
 
 ## How it fits together
 
@@ -83,6 +110,8 @@ npm install
 npm run server:demo      # terminal 1: store server with demo data on :7420
 npm run dev              # terminal 2: open http://localhost:5173
 ```
+
+The demo store also has two suppliers, one purchase, a Rs 3,400 fuel expense and an old khata balance for Haji Rasheed.
 
 Demo sign-ins:
 
@@ -143,6 +172,7 @@ src/                 Till UI (React + TypeScript)
   i18n/              English / Urdu text
   print/             Receipt / return slip / Z-report layout, screen preview, printer image
   screens/           Device setup, store setup, sign-in, open shift, Till, Returns, Close shift, Activity
+  backoffice/        Dashboard, Inventory, Product form, Excel import, Purchases, Suppliers, Expenses, Customers & Khata, Settings
 src-tauri/           Desktop shell: main-PC / extra-till mode, starts the store server
 ```
 
@@ -164,10 +194,10 @@ CI runs all of these on every push.
    - Returns, close shift, cash in/out, approval rules and activity log.
    - Direct ESC/POS printing with Urdu, and the cash drawer.
    - Urdu server messages.
-3. **Backoffice:**
-   - Dashboard, Inventory, Add/Edit product with Excel import, and Purchases (GRN) with supplier payables.
-   - Expenses, Customers & Khata, users and settings.
-   - Paid add-ons (SMS OTP, WhatsApp API), off by default.
+3. **Backoffice** — done:
+   - Dashboard, inventory, add/edit product, Excel import, stock corrections.
+   - Purchases (GRN) with bonus and freight, supplier payables.
+   - Expenses, customers & khata with WhatsApp reminders, users, store settings, recovery code.
 4. **Cloud:**
    - Turso sync from the outbox (one database per store), with a nightly full backup and restore.
    - Head-office view of all stores.

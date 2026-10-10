@@ -1,7 +1,10 @@
 // Screen text in English and Urdu. Each user picks their own language; it is
 // saved with their login. Product names stay as printed on the pack.
 
+import { boEn, boUr } from './backoffice';
+
 const en = {
+  ...boEn,
   appName: 'Medical Store POS',
   loading: 'Loading…',
   retry: 'Try again',
@@ -239,6 +242,7 @@ const en = {
 export type StringKey = keyof typeof en;
 
 const ur: Record<StringKey, string> = {
+  ...boUr,
   appName: 'میڈیکل اسٹور POS',
   loading: 'لوڈ ہو رہا ہے…',
   retry: 'دوبارہ کوشش کریں',

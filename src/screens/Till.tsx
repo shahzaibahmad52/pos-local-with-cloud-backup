@@ -62,6 +62,7 @@ export function Till({
   onOpenReturns,
   onCloseShift,
   onOpenActivity,
+  onOpenBackoffice,
   active = true,
 }: {
   user: User;
@@ -74,6 +75,8 @@ export function Till({
   onOpenReturns: () => void;
   onCloseShift: () => void;
   onOpenActivity: () => void;
+  /** Admins only: back to the backoffice. */
+  onOpenBackoffice?: () => void;
   /** False while another screen (returns, shift close…) is on top. */
   active?: boolean;
 }) {
@@ -363,6 +366,7 @@ export function Till({
           )}
           {isAdmin && (
             <>
+              {onOpenBackoffice && <button type="button" className="head-btn" onClick={onOpenBackoffice}>{t('backofficeBtn')}</button>}
               <button type="button" className="head-btn" onClick={onOpenActivity}>{t('headActivity')}</button>
               <button type="button" className="head-btn" onClick={() => setDialog('printer')}>{t('headPrinter')}</button>
             </>

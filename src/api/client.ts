@@ -1,5 +1,30 @@
 import type {
   ActivityEntry,
+  AdjustReason,
+  Dashboard,
+  Expense,
+  ImportReport,
+  ImportRow,
+  InventoryPage,
+  InventoryTab,
+  KhataAccount,
+  KhataList,
+  KhataPayMethod,
+  KhataPaymentSlip,
+  KhataStatement,
+  LastBuy,
+  MoneySource,
+  MonthExpenses,
+  OpenTill,
+  ProductDetail,
+  ProductInput,
+  Purchase,
+  PurchaseInput,
+  ReceiptLanguage,
+  StoreSettings,
+  Supplier,
+  SupplierLedgerLine,
+  UserRow,
   ApprovalInput,
   ApprovalRules,
   BarcodeHit,
@@ -14,10 +39,18 @@ import type {
   SaleForReturn,
   SaleInput,
   Shift,
+  StoreHeader,
   ShiftSummary,
   TillAction,
   User,
 } from './types';
+
+const q = (params: Record<string, string | number | undefined>) =>
+  Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== '')
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
+    .join('&');
+const id = encodeURIComponent;
 
 /** An error from the store server, with its stable code and a message for people. */
 export class ApiError extends Error {
@@ -112,4 +145,69 @@ export const api = {
     request<ShiftSummary>('POST', `/api/shifts/${encodeURIComponent(id)}/close`, { note }),
   cashMove: (input: { tillCode: string; kind: 'in' | 'out'; amount: number; reason: string; approval?: ApprovalInput }) =>
     request<ShiftSummary>('POST', '/api/cash-moves', input),
+
+  // Backoffice
+  recover: (input: { userId: string; code: string; newPassword: string }) =>
+    request<{ token: string; user: User }>('POST', '/api/recover', input),
+  dashboard: (from: string, to: string) => request<Dashboard>('GET', `/api/dashboard?${q({ from, to })}`),
+  openTills: () => request<OpenTill[]>('GET', '/api/tills/open'),
+  inventory: (p: { q?: string; tab?: InventoryTab; category?: string; offset?: number; limit?: number }) =>
+    request<InventoryPage>('GET', `/api/inventory?${q(p)}`),
+  productDetail: (productId: string) => request<ProductDetail>('GET', `/api/inventory/${id(productId)}`),
+  createProduct: (input: ProductInput) => request<Product>('POST', '/api/products', input),
+  updateProduct: (productId: string, input: ProductInput) =>
+    request<ProductDetail>('PUT', `/api/products/${id(productId)}`, input),
+  receiveStock: (input: { productId: string; batchNo: string; expiry?: string; baseQty: number; costPerBase: number; reason: 'opening' }) =>
+    request<Product>('POST', '/api/stock/receive', input),
+  adjustStock: (input: { batchId: string; newQty: number; reason: AdjustReason; note?: string }) =>
+    request<ProductDetail>('POST', '/api/stock/adjust', input),
+  importProducts: (rows: ImportRow[], commit: boolean) =>
+    request<ImportReport>('POST', '/api/products/import', { rows, commit }),
+  suppliers: () => request<Supplier[]>('GET', '/api/suppliers'),
+  saveSupplier: (supplierId: string | null, input: { name: string; phone?: string; notes?: string; termsDays: number }) =>
+    supplierId
+      ? request<Supplier>('PUT', `/api/suppliers/${id(supplierId)}`, input)
+      : request<Supplier>('POST', '/api/suppliers', input),
+  supplierLedger: (supplierId: string) => request<SupplierLedgerLine[]>('GET', `/api/suppliers/${id(supplierId)}/ledger`),
+  paySupplier: (supplierId: string, input: { amount: number; paidFrom: MoneySource; tillCode?: string; note?: string }) =>
+    request<Supplier>('POST', `/api/suppliers/${id(supplierId)}/payments`, input),
+  supplierOpening: (supplierId: string, amount: number, note?: string) =>
+    request<Supplier>('POST', `/api/suppliers/${id(supplierId)}/opening`, { amount, note }),
+  purchases: (supplierId?: string) => request<Purchase[]>('GET', `/api/purchases?${q({ supplierId })}`),
+  purchase: (purchaseId: string) => request<Purchase>('GET', `/api/purchases/${id(purchaseId)}`),
+  receivePurchase: (input: PurchaseInput) => request<Purchase>('POST', '/api/purchases', input),
+  lastBuy: (productId: string) => request<LastBuy | null>('GET', `/api/purchases/last-buy/${id(productId)}`),
+  expenses: (month: string) => request<MonthExpenses>('GET', `/api/expenses?${q({ month })}`),
+  addExpense: (input: { category: string; amount: number; date: string; paidFrom: MoneySource; tillCode?: string; note?: string }) =>
+    request<Expense>('POST', '/api/expenses', input),
+  deleteExpense: (expenseId: string) => request<{ ok: boolean }>('DELETE', `/api/expenses/${id(expenseId)}`),
+  khata: (p: { q?: string; tab?: 'all' | 'balance' | 'overdue' }) => request<KhataList>('GET', `/api/khata?${q(p)}`),
+  khataStatement: (customerId: string) => request<KhataStatement>('GET', `/api/khata/${id(customerId)}`),
+  khataPayment: (customerId: string, input: { amount: number; method: KhataPayMethod; tillCode?: string; note?: string }) =>
+    request<KhataPaymentSlip>('POST', `/api/khata/${id(customerId)}/payments`, input),
+  khataOpening: (customerId: string, amount: number, note?: string) =>
+    request<KhataAccount>('POST', `/api/khata/${id(customerId)}/opening`, { amount, note }),
+  updateCustomer: (
+    customerId: string,
+    input: { name: string; phone?: string; notes?: string; creditLimit: number; receiptLanguage: ReceiptLanguage | null; active: boolean },
+  ) => request<KhataAccount>('PUT', `/api/customers/${id(customerId)}`, input),
+  createCustomerFull: (input: { name: string; phone?: string; creditLimit: number; receiptLanguage: ReceiptLanguage | null }) =>
+    request<Customer>('POST', '/api/customers', input),
+  settings: () => request<StoreSettings>('GET', '/api/settings'),
+  updateStore: (input: {
+    name: string;
+    address?: string;
+    phone?: string;
+    ntn?: string;
+    drugLicense?: string;
+    receiptFooter?: string;
+    receiptFooterUr?: string;
+    receiptLanguage: ReceiptLanguage;
+  }) => request<StoreHeader>('PUT', '/api/store', input),
+  users: () => request<UserRow[]>('GET', '/api/users'),
+  createUser: (input: { name: string; role: 'admin' | 'cashier'; secret: string; canApprove: boolean; language: Language }) =>
+    request<User>('POST', '/api/users', input),
+  updateUser: (userId: string, input: { name: string; canApprove: boolean; language: Language; active: boolean; secret?: string }) =>
+    request<UserRow>('PUT', `/api/users/${id(userId)}`, input),
+  newRecoveryCode: () => request<{ code: string }>('POST', '/api/recovery-code'),
 };

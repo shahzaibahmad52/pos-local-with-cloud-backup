@@ -23,9 +23,26 @@ const ACTIONS: Record<string, [string, string]> = {
   'rules.update': ['Approval rules changed', 'اصول تبدیل'],
   'store.setup': ['Store set up', 'اسٹور سیٹ اپ'],
   'user.create': ['User added', 'صارف شامل'],
+  'user.update': ['User changed', 'صارف میں تبدیلی'],
+  'product.update': ['Product changed', 'پروڈکٹ میں تبدیلی'],
+  'product.import': ['Products imported from Excel', 'Excel سے پروڈکٹس'],
+  'stock.adjust': ['Stock corrected', 'اسٹاک درست کیا'],
+  'purchase.receive': ['Purchase received', 'خریداری وصول'],
+  'supplier.create': ['Supplier added', 'سپلائر شامل'],
+  'supplier.update': ['Supplier changed', 'سپلائر میں تبدیلی'],
+  'supplier.pay': ['Supplier paid', 'سپلائر کو ادائیگی'],
+  'supplier.opening': ['Supplier old balance', 'سپلائر کا پرانا بقایا'],
+  'expense.add': ['Expense', 'خرچ'],
+  'expense.delete': ['Expense deleted', 'خرچ حذف'],
+  'khata.payment': ['Khata payment received', 'کھاتے کی وصولی'],
+  'khata.opening': ['Khata old balance added', 'کھاتے کا پرانا بقایا'],
+  'customer.update': ['Customer changed', 'گاہک میں تبدیلی'],
+  'store.update': ['Store details changed', 'اسٹور کی معلومات تبدیل'],
+  'recovery.new': ['New recovery code made', 'نیا ریکوری کوڈ'],
+  'recovery.used': ['Password reset with recovery code', 'ریکوری کوڈ سے پاس ورڈ ری سیٹ'],
 };
 
-const MONEY_KEYS = ['amount', 'refund', 'counted', 'expected', 'difference', 'openingCash', 'khata'];
+const MONEY_KEYS = ['amount', 'refund', 'counted', 'expected', 'difference', 'openingCash', 'khata', 'net', 'paidNow', 'costChange'];
 
 function actionLabel(action: string, lang: Language): string {
   const pair = ACTIONS[action];
@@ -54,7 +71,7 @@ const FILTERS: [string, StringKey][] = [
   ['stock', 'filterStock'],
 ];
 
-export function Activity({ store, onBack }: { store: StoreHeader; onBack: () => void }) {
+export function Activity({ store, onBack, backLabel }: { store: StoreHeader; onBack: () => void; backLabel?: string }) {
   const { t, lang } = useI18n();
   const [date, setDate] = useState(today);
   const [filter, setFilter] = useState('all');
@@ -120,7 +137,7 @@ export function Activity({ store, onBack }: { store: StoreHeader; onBack: () => 
             <span className="small" style={{ color: 'var(--night-muted)' }}>{store.name} · {t('activityHelp')}</span>
           </div>
         </div>
-        <button type="button" className="head-btn" onClick={onBack}>{t('backToTill')}</button>
+        <button type="button" className="head-btn" onClick={onBack}>{backLabel ?? t('backToTill')}</button>
       </header>
 
       <div className="till-body">

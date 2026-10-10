@@ -30,3 +30,8 @@ export function formatGrams(grams: number): string {
   }
   return `${grams.toLocaleString('en-US')} g`;
 }
+
+/** Keeps a left-to-right value (number, code, "24 btl") in order inside Urdu text. */
+export function ltr(text: string): string {
+  return `\u2066${text}\u2069`;
+}

@@ -3,7 +3,7 @@
 // into the 1-bit image sent to the thermal printer (raster.ts), so the
 // preview and the paper always match.
 
-import type { Receipt, ReceiptLanguage, ReturnSlip, ShiftSummary, StoreHeader } from '../api/types';
+import type { KhataPaymentSlip, KhataStatement, Receipt, ReceiptLanguage, ReturnSlip, ShiftSummary, StoreHeader } from '../api/types';
 import { formatAmount, formatGrams } from '../domain/money';
 
 export type Block =
@@ -76,6 +76,26 @@ const L = {
   difference: ['Difference', 'فرق'],
   notInDrawer: ['Not in drawer', 'دراز میں نہیں'],
   note: ['Note', 'نوٹ'],
+  khataPayment: ['KHATA PAYMENT', 'کھاتہ ادائیگی'],
+  statement: ['KHATA STATEMENT', 'کھاتہ اسٹیٹمنٹ'],
+  received: ['RECEIVED Rs', 'وصول (روپے)'],
+  balanceBefore: ['Balance before', 'پہلے بقایا'],
+  balanceNow: ['Balance now', 'اب بقایا'],
+  receivedBy: ['Received by', 'وصول کنندہ'],
+  paidBy: ['Paid by', 'ادائیگی بذریعہ'],
+  bank: ['Bank', 'بینک'],
+  bill: ['Bill', 'بل'],
+  returnLine: ['Return', 'واپسی'],
+  oldBalance: ['Old balance', 'پرانا بقایا'],
+  payment: ['Payment', 'ادائیگی'],
+  balanceDue: ['BALANCE DUE Rs', 'واجب الادا (روپے)'],
+  creditLimit: ['Credit limit', 'اُدھار کی حد'],
+  printed: ['Printed', 'پرنٹ'],
+  recoveryTitle: ['OWNER RECOVERY CODE', 'مالک کا ریکوری کوڈ'],
+  recoveryHelp: [
+    'Keep this safe. On the main PC, choose the owner on the sign-in screen, then "Forgot password?". Works once.',
+    'اسے محفوظ رکھیں۔ مین PC پر سائن اِن اسکرین پر مالک کو چنیں، پھر "پاس ورڈ بھول گئے؟"۔ ایک بار چلتا ہے۔',
+  ],
 } as const;
 
 type Key = keyof typeof L;
@@ -106,6 +126,13 @@ function storeHeader(store: StoreHeader): Block[] {
   if (ids.length) out.push({ kind: 'center', text: ids.join(' · '), ltr: true });
   out.push({ kind: 'rule' });
   return out;
+}
+
+/** The store's own closing line in the receipt's language, or the default thanks. */
+function footer(store: StoreHeader, lang: ReceiptLanguage): string {
+  const en = store.receiptFooter ?? L.thanks[0];
+  const ur = store.receiptFooterUr ?? L.thanks[1];
+  return lang === 'ur' ? ur : lang === 'both' ? `${en}\n${ur}` : en;
 }
 
 const paidKey: Record<string, Key> = { cash: 'cash', card: 'card', jazzcash: 'jazzcash', easypaisa: 'easypaisa', khata: 'khata' };
@@ -146,7 +173,7 @@ export function saleDoc(r: Receipt, lang: ReceiptLanguage): Doc {
   if (r.khataBalance !== null) b.push({ kind: 'row', label: t('khataBalance'), value: formatAmount(r.khataBalance) });
   b.push({ kind: 'rule' });
   b.push({ kind: 'center', text: lang === 'both' ? `${L.policy[0]}\n${L.policy[1]}` : t('policy'), small: true });
-  b.push({ kind: 'center', text: r.store.receiptFooter && lang === 'en' ? r.store.receiptFooter : t('thanks'), bold: true });
+  b.push({ kind: 'center', text: footer(r.store, lang), bold: true });
   b.push({ kind: 'center', text: r.receiptNo, small: true, ltr: true });
   return { ...docDir(lang), blocks: b };
 }
@@ -223,4 +250,78 @@ export function zReportDoc(s: ShiftSummary, lang: ReceiptLanguage): Doc {
   b.push({ kind: 'rule' });
   b.push({ kind: 'center', text: formatDateTime(new Date().toISOString()), small: true, ltr: true });
   return { ...docDir(lang), blocks: b };
+}
+
+const payMethodKey: Record<string, Key> = { cash: 'refundCash', jazzcash: 'jazzcash', easypaisa: 'easypaisa', bank: 'bank' };
+
+/** Slip for the customer when they pay off khata. */
+export function khataPaymentDoc(p: KhataPaymentSlip, lang: ReceiptLanguage): Doc {
+  const t = make(lang);
+  const method = payMethodKey[p.method] ?? 'refundCash';
+  // JazzCash / Easypaisa keys read "Paid — JazzCash"; show just the name.
+  const methodName = method === 'jazzcash' ? 'JazzCash' : method === 'easypaisa' ? 'Easypaisa' : t(method);
+  const b: Block[] = [
+    ...storeHeader(p.store),
+    { kind: 'center', text: t('khataPayment'), bold: true },
+    { kind: 'row', label: t('customer'), value: p.customerName },
+    { kind: 'row', label: t('date'), value: formatDateTime(p.createdAt) },
+    { kind: 'rule' },
+    { kind: 'row', label: t('balanceBefore'), value: formatAmount(p.balanceBefore) },
+    { kind: 'rule', heavy: true },
+    { kind: 'row', label: t('received'), value: formatAmount(p.amount), bold: true, big: true },
+    { kind: 'rule', heavy: true },
+    { kind: 'row', label: t('paidBy'), value: methodName },
+    { kind: 'row', label: t('balanceNow'), value: formatAmount(p.balanceAfter), bold: true },
+    { kind: 'row', label: t('receivedBy'), value: p.receivedBy },
+    { kind: 'rule' },
+    { kind: 'center', text: footer(p.store, lang), bold: true },
+  ];
+  return { ...docDir(lang), blocks: b };
+}
+
+/** A customer's khata on 80 mm paper: every bill and payment with the running balance. */
+export function khataStatementDoc(s: KhataStatement, lang: ReceiptLanguage): Doc {
+  const t = make(lang);
+  const b: Block[] = [
+    ...storeHeader(s.store),
+    { kind: 'center', text: t('statement'), bold: true },
+    { kind: 'row', label: t('customer'), value: s.account.name },
+  ];
+  if (s.account.phone) b.push({ kind: 'row', label: 'Ph', value: s.account.phone });
+  if (s.account.creditLimit > 0) b.push({ kind: 'row', label: t('creditLimit'), value: formatAmount(s.account.creditLimit) });
+  b.push({ kind: 'rule' });
+  for (const l of s.lines) {
+    const what =
+      l.kind === 'sale'
+        ? `${t('bill')} ${l.reference ?? ''}`
+        : l.kind === 'return'
+          ? `${t('returnLine')} ${l.reference ?? ''}`
+          : l.kind === 'opening'
+            ? t('oldBalance')
+            : `${t('payment')} · ${l.kind === 'jazzcash' ? 'JazzCash' : l.kind === 'easypaisa' ? 'Easypaisa' : t(payMethodKey[l.kind] ?? 'refundCash')}`;
+    b.push({ kind: 'row', label: `${formatDateTime(l.createdAt).slice(0, 10)}  ${what.trim()}`, value: `${l.amount > 0 ? '+' : ''}${formatAmount(l.amount)}` });
+    b.push({ kind: 'row', label: '', value: `= ${formatAmount(l.balance)}` });
+  }
+  b.push({ kind: 'rule', heavy: true });
+  b.push({ kind: 'row', label: t('balanceDue'), value: formatAmount(s.account.balance), bold: true, big: true });
+  b.push({ kind: 'rule', heavy: true });
+  b.push({ kind: 'center', text: `${t('printed')} ${formatDateTime(new Date().toISOString())}`, small: true });
+  return { ...docDir(lang), blocks: b };
+}
+
+/** The owner's one-time recovery code, to keep somewhere safe. */
+export function recoveryCodeDoc(store: StoreHeader, code: string, lang: ReceiptLanguage): Doc {
+  const t = make(lang);
+  return {
+    ...docDir(lang),
+    blocks: [
+      ...storeHeader(store),
+      { kind: 'center', text: t('recoveryTitle'), bold: true },
+      { kind: 'rule' },
+      { kind: 'title', text: code },
+      { kind: 'rule' },
+      { kind: 'center', text: lang === 'both' ? `${L.recoveryHelp[0]}\n${L.recoveryHelp[1]}` : t('recoveryHelp'), small: true },
+      { kind: 'center', text: formatDateTime(new Date().toISOString()), small: true, ltr: true },
+    ],
+  };
 }

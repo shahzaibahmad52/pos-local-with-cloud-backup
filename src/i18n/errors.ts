@@ -35,6 +35,20 @@ const UR: Record<string, (p: Params) => string> = {
   'shift.not_counted': () => 'شفٹ بند کرنے سے پہلے نقد گنیں۔',
   'shift.closed': () => 'یہ شفٹ پہلے ہی بند ہے۔',
   'cash.reason_required': () => 'لکھیں کہ نقد کس لیے ہے۔',
+  'drawer.no_shift': (p) => `ٹِل ${s(p.till)} پر شفٹ کھلی نہیں، اس لیے اس کی دراز استعمال نہیں ہو سکتی۔`,
+  'drawer.no_till': () => 'چنیں کہ نقد کس ٹِل کی دراز سے ہے۔',
+  'purchase.empty': () => 'کم از کم ایک آئٹم شامل کریں۔',
+  'purchase.qty': (p) => `لائن ${n(p.line)}: تعداد 0 سے زیادہ ہونی چاہیے۔`,
+  'purchase.price': (p) => `لائن ${n(p.line)}: قیمتیں اور رعایت دیکھیں۔`,
+  'purchase.expiry_format': (p) => `لائن ${n(p.line)}: میعاد ایسے لکھیں 08/2028۔`,
+  'purchase.expired': (p) => `لائن ${n(p.line)}: اس بیچ کی میعاد پہلے ہی ختم ہے (${s(p.expiry)})۔`,
+  'purchase.expiry_required': (p) => `لائن ${n(p.line)}: ${s(p.product)} کی میعاد لکھیں۔`,
+  'purchase.unit': (p) => `لائن ${n(p.line)}: پیک چنیں۔`,
+  'purchase.overpaid': () => 'ابھی ادا کی گئی رقم انوائس سے زیادہ ہے۔',
+  'supplier.overpay': (p) => `یہ ${s(p.name)} کے بقایا ${formatRs(n(p.balance))} سے زیادہ ہے۔`,
+  'khata.overpay': (p) => `${s(p.name)} کے ذمے صرف ${formatRs(n(p.balance))} ہیں۔`,
+  'expense.locked': () => 'یہ خرچ بند شفٹ کی دراز سے ادا ہوا تھا، اس لیے حذف نہیں ہو سکتا۔',
+  'barcode.taken': (p) => `بارکوڈ ${s(p.code)} پہلے سے ${s(p.product)} پر ہے۔`,
 };
 
 const UR_BY_CODE: Record<string, string> = {

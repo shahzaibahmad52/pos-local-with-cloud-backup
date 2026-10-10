@@ -142,6 +142,26 @@ async fn open_cash_drawer(printer: String) -> Result<(), String> {
         .map_err(|e| e.to_string())?
 }
 
+/// Opens a WhatsApp message link (wa.me) in the default browser, which hands
+/// it to WhatsApp. Only wa.me links are allowed, so the page can't open
+/// anything else on the PC.
+#[tauri::command]
+fn open_whatsapp(url: String) -> Result<(), String> {
+    let ok = url
+        .strip_prefix("https://wa.me/")
+        .is_some_and(|rest| rest.chars().all(|c| c.is_ascii_alphanumeric() || "?=%&-_.~+".contains(c)));
+    if !ok {
+        return Err("Only WhatsApp links can be opened.".into());
+    }
+    #[cfg(windows)]
+    let result = std::process::Command::new("rundll32").args(["url.dll,FileProtocolHandler", &url]).spawn();
+    #[cfg(target_os = "macos")]
+    let result = std::process::Command::new("open").arg(&url).spawn();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let result = std::process::Command::new("xdg-open").arg(&url).spawn();
+    result.map(|_| ()).map_err(|e| format!("Couldn't open WhatsApp: {e}"))
+}
+
 /// Restarts the app so a new device setting (e.g. becoming the main PC) takes effect.
 #[tauri::command]
 fn restart_app(app: AppHandle) {
@@ -176,6 +196,7 @@ pub fn run() {
             list_printers,
             print_raster,
             open_cash_drawer,
+            open_whatsapp,
             restart_app
         ])
         .run(tauri::generate_context!())

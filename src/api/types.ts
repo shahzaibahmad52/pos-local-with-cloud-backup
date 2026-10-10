@@ -61,6 +61,7 @@ export interface StoreHeader {
   ntn: string | null;
   drugLicense: string | null;
   receiptFooter: string | null;
+  receiptFooterUr: string | null;
   receiptLanguage: ReceiptLanguage;
 }
 
@@ -247,4 +248,366 @@ export interface ShiftSummary {
   countAttempts: number;
   note: string | null;
   store: StoreHeader;
+}
+
+// ---- Backoffice (admin only) ----
+
+/** Where money for a purchase, expense or supplier payment came from. */
+export type MoneySource = 'drawer' | 'owner' | 'bank' | 'wallet';
+
+export interface OpenTill {
+  tillCode: string;
+  cashierName: string;
+}
+
+export interface DashboardFigures {
+  sales: number;
+  bills: number;
+  refunds: number;
+  netSales: number;
+  salesTax: number;
+  costOfSales: number;
+  grossProfit: number;
+  expenses: number;
+  netProfit: number;
+}
+
+export interface UnitPrice {
+  id: string;
+  name: string;
+  baseQty: number;
+  price: number;
+}
+
+export interface InventoryRow {
+  id: string;
+  name: string;
+  genericName: string | null;
+  company: string | null;
+  category: string | null;
+  kind: 'medicine' | 'general';
+  sellMode: 'unit' | 'weight';
+  baseUnit: string;
+  pricePerKg: number | null;
+  rack: string | null;
+  active: boolean;
+  reorderLevel: number;
+  stockBase: number;
+  expiredBase: number;
+  stockValue: number;
+  avgCost: number;
+  nextExpiry: string | null;
+  low: boolean;
+  expiring: boolean;
+  units: UnitPrice[];
+}
+
+export interface ExpiringBatch {
+  productId: string;
+  productName: string;
+  batchNo: string;
+  expiry: string;
+  qtyBase: number;
+  baseUnit: string;
+  expired: boolean;
+}
+
+export interface Dashboard {
+  from: string;
+  to: string;
+  figures: DashboardFigures;
+  payments: [string, number][];
+  khataDue: number;
+  khataCustomers: number;
+  payables: number;
+  payablesOverdue: number;
+  days: { date: string; netSales: number }[];
+  lowStock: InventoryRow[];
+  expiring: ExpiringBatch[];
+}
+
+export type InventoryTab = 'all' | 'low' | 'expiring' | 'expired' | 'medicine' | 'general' | 'archived';
+
+export interface InventoryPage {
+  summary: { productCount: number; stockValue: number; lowCount: number; expiringCount: number; expiredCount: number };
+  rows: InventoryRow[];
+  total: number;
+  categories: string[];
+}
+
+export interface UnitDetail {
+  id: string;
+  name: string;
+  nameUr: string | null;
+  baseQty: number;
+  price: number;
+  sellable: boolean;
+}
+
+export interface BatchDetail {
+  id: string;
+  batchNo: string;
+  expiry: string | null;
+  costPerBase: number;
+  qtyOnHand: number;
+  receivedAt: string;
+  expired: boolean;
+  prices: [string, number][];
+}
+
+export interface LastBuy {
+  unitName: string;
+  tradePrice: number;
+  discBp: number;
+  salePrice: number | null;
+  supplierName: string;
+  invoiceDate: string;
+}
+
+export interface ProductDetail extends InventoryRow {
+  taxRateBp: number;
+  rxRequired: boolean;
+  controlled: boolean;
+  coldChain: boolean;
+  allUnits: UnitDetail[];
+  barcodes: { code: string; unitName: string | null }[];
+  batches: BatchDetail[];
+  lastBuy: LastBuy | null;
+  moves: { createdAt: string; batchNo: string | null; qtyDelta: number; reason: string; userName: string | null }[];
+}
+
+export interface UnitInput {
+  id?: string;
+  name: string;
+  nameUr?: string | null;
+  baseQty: number;
+  price: number;
+  sellable?: boolean;
+}
+
+export interface ProductInput {
+  name: string;
+  genericName?: string | null;
+  company?: string | null;
+  category?: string | null;
+  kind: 'medicine' | 'general';
+  sellMode?: 'unit' | 'weight';
+  baseUnit: string;
+  pricePerKg?: number | null;
+  taxRateBp: number;
+  rxRequired: boolean;
+  controlled: boolean;
+  coldChain: boolean;
+  rack?: string | null;
+  reorderLevel: number;
+  units: UnitInput[];
+  barcodes: { code: string; unitName?: string | null }[];
+  active?: boolean;
+}
+
+export type AdjustReason = 'damaged' | 'expired' | 'lost' | 'count' | 'other';
+
+export interface ImportRow {
+  row: number;
+  name: string;
+  genericName?: string;
+  company?: string;
+  category?: string;
+  kind: string;
+  sellMode: string;
+  baseUnit: string;
+  basePrice?: number;
+  baseSellable?: boolean;
+  pack2Name?: string;
+  pack2Qty?: number;
+  pack2Price?: number;
+  pack3Name?: string;
+  pack3Qty?: number;
+  pack3Price?: number;
+  pricePerKg?: number;
+  barcode?: string;
+  barcodePack?: string;
+  rack?: string;
+  taxRateBp?: number;
+  rxRequired?: boolean;
+  reorderLevel?: number;
+  openingQty?: number;
+  batchNo?: string;
+  expiry?: string;
+  costPerBase?: number;
+}
+
+export interface ImportReport {
+  committed: boolean;
+  newCount: number;
+  updateCount: number;
+  errorCount: number;
+  rows: { row: number; name: string; status: 'new' | 'update' | 'error'; message: string | null }[];
+}
+
+export interface Supplier {
+  id: string;
+  name: string;
+  phone: string | null;
+  notes: string | null;
+  termsDays: number;
+  balance: number;
+  nextDue: string | null;
+  overdue: boolean;
+}
+
+export interface PurchaseLineInput {
+  productId: string;
+  unitId?: string;
+  batchNo: string;
+  expiry?: string;
+  qty: number;
+  bonus: number;
+  tradePrice: number;
+  discBp: number;
+  salePrice?: number;
+}
+
+export interface PurchaseInput {
+  supplierId: string;
+  invoiceNo?: string;
+  invoiceDate: string;
+  termsDays: number;
+  freight: number;
+  paidNow: number;
+  paidFrom: MoneySource;
+  tillCode?: string;
+  lines: PurchaseLineInput[];
+  clientRef: string;
+}
+
+export interface Purchase {
+  id: string;
+  purchaseNo: string;
+  supplierId: string;
+  supplierName: string;
+  invoiceNo: string | null;
+  invoiceDate: string;
+  dueDate: string | null;
+  gross: number;
+  discount: number;
+  freight: number;
+  net: number;
+  paidNow: number;
+  userName: string;
+  createdAt: string;
+  lineCount: number;
+  lines: {
+    productId: string;
+    productName: string;
+    unitName: string;
+    batchNo: string;
+    expiry: string | null;
+    qty: number;
+    bonus: number;
+    tradePrice: number;
+    discBp: number;
+    salePrice: number | null;
+    lineTotal: number;
+    costPerBase: number;
+  }[];
+}
+
+export interface SupplierLedgerLine {
+  createdAt: string;
+  detail: string;
+  purchaseId: string | null;
+  paidFrom: MoneySource | null;
+  amount: number;
+  balance: number;
+}
+
+export interface Expense {
+  id: string;
+  category: string;
+  amount: number;
+  date: string;
+  paidFrom: MoneySource;
+  tillCode: string | null;
+  note: string | null;
+  userName: string;
+  createdAt: string;
+  locked: boolean;
+}
+
+export interface MonthExpenses {
+  month: string;
+  total: number;
+  byCategory: [string, number][];
+  entries: Expense[];
+}
+
+export interface KhataAccount {
+  id: string;
+  name: string;
+  phone: string | null;
+  notes: string | null;
+  creditLimit: number;
+  receiptLanguage: ReceiptLanguage | null;
+  active: boolean;
+  balance: number;
+  lastPaid: string | null;
+  ageDays: number;
+  overdue: boolean;
+}
+
+export interface KhataList {
+  summary: {
+    totalDue: number;
+    owingCount: number;
+    overdueTotal: number;
+    overdueCount: number;
+    collectedThisMonth: number;
+    nearLimitCount: number;
+  };
+  accounts: KhataAccount[];
+}
+
+export type KhataPayMethod = 'cash' | 'jazzcash' | 'easypaisa' | 'bank';
+
+export interface KhataLedgerLine {
+  createdAt: string;
+  kind: 'sale' | 'return' | 'opening' | KhataPayMethod;
+  reference: string | null;
+  note: string | null;
+  amount: number;
+  balance: number;
+}
+
+export interface KhataStatement {
+  account: KhataAccount;
+  lines: KhataLedgerLine[];
+  store: StoreHeader;
+}
+
+export interface KhataPaymentSlip {
+  customerName: string;
+  amount: number;
+  method: KhataPayMethod;
+  balanceBefore: number;
+  balanceAfter: number;
+  createdAt: string;
+  receivedBy: string;
+  store: StoreHeader;
+}
+
+export interface UserRow {
+  id: string;
+  name: string;
+  role: 'admin' | 'cashier';
+  canApprove: boolean;
+  language: Language;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface StoreSettings {
+  store: StoreHeader;
+  hasRecoveryCode: boolean;
+  version: string;
 }

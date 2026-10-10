@@ -3,6 +3,7 @@ import { api, ApiError, setToken } from '../api/client';
 import type { Language, LoginTile, StoreHeader, User } from '../api/types';
 import { BrandMark, LanguageToggle } from '../components/common';
 import { PinPad } from '../components/PinPad';
+import { describeError } from '../i18n/errors';
 import { useI18n } from '../i18n/i18n';
 
 export function Login({
@@ -21,6 +22,9 @@ export function Login({
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [recovering, setRecovering] = useState(false);
+  const [code, setCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
 
   useEffect(() => {
     api
@@ -36,6 +40,7 @@ export function Login({
 
   const pick = (tile: LoginTile) => {
     setSelected(tile);
+    setRecovering(false);
     setPin('');
     setPassword('');
     setError(null);
@@ -73,6 +78,22 @@ export function Login({
   };
 
   const isAdmin = selected?.role === 'admin';
+
+  const recover = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!selected || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api.recover({ userId: selected.id, code, newPassword });
+      setToken(res.token);
+      window.alert(t('recoverDone'));
+      onSignedIn(res.user);
+    } catch (err) {
+      setError(describeError(err, lang));
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="split">
@@ -114,11 +135,27 @@ export function Login({
             </div>
           )}
 
-          {selected && isAdmin && (
+          {selected && isAdmin && !recovering && (
             <form className="field" onSubmit={submitPassword}>
               <label className="label" htmlFor="pw">{t('enterPassword')}</label>
               <input id="pw" type="password" className="input ltr" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus autoComplete="current-password" />
               <button type="submit" className="btn btn-dark btn-lg" disabled={busy || password.length === 0}>{t('signIn')}</button>
+              <button type="button" className="btn" style={{ border: 0, background: 'none', color: 'var(--brand)', height: 36 }} onClick={() => { setRecovering(true); setError(null); }}>
+                {t('forgotPassword')}
+              </button>
+            </form>
+          )}
+
+          {selected && isAdmin && recovering && (
+            <form className="field" onSubmit={(e) => void recover(e)}>
+              <h2>{t('recoverTitle')}</h2>
+              <span className="help">{t('recoverHelp')}</span>
+              <label className="label" htmlFor="rc-code">{t('recoveryCode')}</label>
+              <input id="rc-code" className="input mono ltr" placeholder="XXXX-XXXX-XXXX" value={code} onChange={(e) => setCode(e.target.value)} autoFocus autoComplete="off" />
+              <label className="label" htmlFor="rc-pw">{t('newPassword')}</label>
+              <input id="rc-pw" type="password" className="input ltr" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" />
+              <button type="submit" className="btn btn-dark btn-lg" disabled={busy || !code.trim() || newPassword.length < 8}>{t('setNewPassword')}</button>
+              <button type="button" className="btn" onClick={() => setRecovering(false)}>{t('back')}</button>
             </form>
           )}
 
