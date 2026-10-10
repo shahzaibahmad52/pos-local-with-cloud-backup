@@ -102,3 +102,47 @@ async fn till_flow() {
     let (status, _) = call(&app, "GET", "/api/me", t, None).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
+
+#[tokio::test]
+async fn errors_carry_reason_and_params_for_translation() {
+    let app = app();
+    let (_, tiles) = call(&app, "GET", "/api/login-tiles", None, None).await;
+    let id_of = |name: &str| {
+        tiles.as_array().unwrap().iter().find(|t| t["name"] == name).unwrap()["id"].as_str().unwrap().to_string()
+    };
+    let (_, login) =
+        call(&app, "POST", "/api/login", None, Some(json!({ "userId": id_of("Ali"), "secret": "1234" }))).await;
+    let token = login["token"].as_str().unwrap().to_string();
+    let t = Some(token.as_str());
+
+    let (_, found) = call(&app, "GET", "/api/products/search?q=flagyl", t, None).await;
+    let flagyl = &found[0];
+    let strip = flagyl["units"].as_array().unwrap().iter().find(|u| u["name"] == "Strip").unwrap()["id"].clone();
+    let sale = json!({
+        "tillCode": "T01",
+        "lines": [{ "productId": flagyl["id"], "unitId": strip, "qty": 13 }],
+        "payments": [{ "method": "cash", "amount": 100000 }]
+    });
+    let (status, body) = call(&app, "POST", "/api/sales", t, Some(sale)).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"], "insufficient_stock");
+    assert_eq!(body["reason"], "stock.short");
+    assert_eq!(body["params"]["have"], 120);
+    assert_eq!(body["params"]["expired"], 50);
+
+    // Cashiers can read the rules but not the activity log.
+    let (status, rules) = call(&app, "GET", "/api/rules", t, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(rules["cashierMaxDiscountBp"], 500);
+    let (status, _) = call(&app, "GET", "/api/activity?date=2026-10-10", t, None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    let (_, owner) =
+        call(&app, "POST", "/api/login", None, Some(json!({ "userId": id_of("Owner"), "secret": "owner1234" }))).await;
+    let owner_token = owner["token"].as_str().unwrap().to_string();
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let (status, log) =
+        call(&app, "GET", &format!("/api/activity?date={today}"), Some(owner_token.as_str()), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(log.as_array().unwrap().iter().any(|e| e["action"] == "store.setup"));
+}

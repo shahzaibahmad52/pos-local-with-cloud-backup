@@ -9,7 +9,8 @@ use argon2::{
     Argon2,
 };
 use rusqlite::{Connection, OptionalExtension};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 use crate::error::{AppError, AppResult};
 
@@ -30,6 +31,14 @@ pub fn verify_secret(secret: &str, hash: &str) -> bool {
     PasswordHash::new(hash)
         .map(|parsed| Argon2::default().verify_password(secret.as_bytes(), &parsed).is_ok())
         .unwrap_or(false)
+}
+
+/// A manager's PIN or password, typed on the till to allow something.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Approval {
+    pub user_id: String,
+    pub secret: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -98,7 +107,8 @@ impl Auth {
             if let Some(Attempts { locked_until: Some(until), .. }) = attempts.get(user_id) {
                 if *until > Instant::now() {
                     let mins = (*until - Instant::now()).as_secs() / 60 + 1;
-                    return Err(AppError::Locked(format!("Too many wrong tries. Try again in {mins} min.")));
+                    return Err(AppError::Locked(format!("Too many wrong tries. Try again in {mins} min."))
+                        .because("auth.locked", json!({ "minutes": mins })));
                 }
             }
         }
@@ -116,9 +126,24 @@ impl Auth {
         if entry.failures >= MAX_FAILED_ATTEMPTS {
             entry.failures = 0;
             entry.locked_until = Some(Instant::now() + LOCKOUT);
-            return Err(AppError::Locked("Too many wrong tries. Locked for 5 minutes.".into()));
+            if load_user(conn, user_id)?.is_some() {
+                crate::db::audit(conn, Some(user_id), None, "auth.locked", &json!({ "minutes": 5 }), None)?;
+            }
+            return Err(AppError::Locked("Too many wrong tries. Locked for 5 minutes.".into())
+                .because("auth.locked", json!({ "minutes": 5 })));
         }
-        Err(AppError::Forbidden("Wrong PIN or password.".into()))
+        Err(AppError::Forbidden("Wrong PIN or password.".into()).because("auth.wrong", json!({})))
+    }
+
+    /// Checks a manager approval, if one was given. Returns the approver.
+    pub fn approver(&self, conn: &Connection, approval: Option<&Approval>) -> AppResult<Option<User>> {
+        let Some(a) = approval else { return Ok(None) };
+        let approver = self.check_secret(conn, &a.user_id, &a.secret)?;
+        if !approver.may_approve() {
+            return Err(AppError::Forbidden(format!("{} can't approve this.", approver.name))
+                .because("approval.not_allowed", json!({ "name": approver.name })));
+        }
+        Ok(Some(approver))
     }
 
     pub fn start_session(&self, user_id: &str) -> AppResult<String> {
@@ -179,11 +204,11 @@ mod tests {
         user(&conn, "u1", "1234");
         let auth = Auth::default();
         for _ in 0..4 {
-            assert!(matches!(auth.check_secret(&conn, "u1", "0000"), Err(AppError::Forbidden(_))));
+            assert!(auth.check_secret(&conn, "u1", "0000").unwrap_err().code() == "forbidden");
         }
-        assert!(matches!(auth.check_secret(&conn, "u1", "0000"), Err(AppError::Locked(_))));
+        assert!(auth.check_secret(&conn, "u1", "0000").unwrap_err().code() == "locked");
         // Even the right PIN is refused while locked.
-        assert!(matches!(auth.check_secret(&conn, "u1", "1234"), Err(AppError::Locked(_))));
+        assert!(auth.check_secret(&conn, "u1", "1234").unwrap_err().code() == "locked");
     }
 
     #[test]

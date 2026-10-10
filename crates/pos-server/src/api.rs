@@ -20,7 +20,7 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use crate::{
     auth::{self, Auth, User},
     error::{AppError, AppResult},
-    products, sales, store,
+    products, returns, rules, sales, shifts, store,
 };
 
 #[derive(Clone)]
@@ -273,6 +273,110 @@ async fn create_customer(
     Ok(Json(store::create_customer(&conn, &input, &me.user)?))
 }
 
+async fn get_rules(State(s): State<AppState>, _me: AuthUser) -> AppResult<Json<rules::ApprovalRules>> {
+    let conn = s.db()?;
+    Ok(Json(rules::load(&conn)?))
+}
+
+async fn put_rules(
+    State(s): State<AppState>,
+    AdminUser(admin): AdminUser,
+    Json(input): Json<rules::ApprovalRules>,
+) -> AppResult<Json<rules::ApprovalRules>> {
+    let conn = s.db()?;
+    Ok(Json(rules::save(&conn, &input, &admin)?))
+}
+
+async fn record_action(
+    State(s): State<AppState>,
+    me: AuthUser,
+    Json(input): Json<rules::ActionInput>,
+) -> AppResult<Json<Value>> {
+    let conn = s.db()?;
+    Ok(Json(rules::record_action(&conn, &s.auth, &me.user, &input)?))
+}
+
+#[derive(Deserialize)]
+struct ActivityQuery {
+    date: String,
+    #[serde(default)]
+    filter: String,
+}
+
+async fn activity(
+    State(s): State<AppState>,
+    _admin: AdminUser,
+    Query(q): Query<ActivityQuery>,
+) -> AppResult<Json<Vec<rules::ActivityEntry>>> {
+    let conn = s.db()?;
+    Ok(Json(rules::activity(&conn, &q.date, &q.filter)?))
+}
+
+async fn sale_for_return(
+    State(s): State<AppState>,
+    _me: AuthUser,
+    Path(receipt_no): Path<String>,
+) -> AppResult<Json<returns::SaleForReturn>> {
+    let conn = s.db()?;
+    Ok(Json(returns::sale_for_return(&conn, &receipt_no)?))
+}
+
+async fn create_return(
+    State(s): State<AppState>,
+    me: AuthUser,
+    Json(input): Json<returns::ReturnInput>,
+) -> AppResult<Json<returns::ReturnSlip>> {
+    let mut conn = s.db()?;
+    Ok(Json(returns::create_return(&mut conn, &s.auth, &me.user, &input)?))
+}
+
+async fn return_slip(
+    State(s): State<AppState>,
+    _me: AuthUser,
+    Path(id): Path<String>,
+) -> AppResult<Json<returns::ReturnSlip>> {
+    let conn = s.db()?;
+    returns::return_slip(&conn, &id)?.map(Json).ok_or_else(|| AppError::NotFound("Return not found.".into()))
+}
+
+async fn shift_summary(
+    State(s): State<AppState>,
+    me: AuthUser,
+    Path(id): Path<String>,
+) -> AppResult<Json<shifts::ShiftSummary>> {
+    let conn = s.db()?;
+    Ok(Json(shifts::summary(&conn, &id, me.user.is_admin())?))
+}
+
+async fn shift_count(
+    State(s): State<AppState>,
+    me: AuthUser,
+    Path(id): Path<String>,
+    Json(input): Json<shifts::CountInput>,
+) -> AppResult<Json<shifts::ShiftSummary>> {
+    let conn = s.db()?;
+    Ok(Json(shifts::count(&conn, &me.user, &id, &input)?))
+}
+
+async fn shift_close(
+    State(s): State<AppState>,
+    me: AuthUser,
+    Path(id): Path<String>,
+    Json(input): Json<shifts::CloseInput>,
+) -> AppResult<Json<shifts::ShiftSummary>> {
+    let conn = s.db()?;
+    Ok(Json(shifts::close(&conn, &me.user, &id, &input)?))
+}
+
+async fn cash_move(
+    State(s): State<AppState>,
+    me: AuthUser,
+    Json(input): Json<shifts::CashMoveInput>,
+) -> AppResult<Json<shifts::ShiftSummary>> {
+    let conn = s.db()?;
+    Ok(Json(shifts::cash_move(&conn, &s.auth, &me.user, &input)?))
+}
+
 /// Origins allowed to call the API from a browser: the desktop app's own
 /// webview and the local development server. Tills on other PCs use the
 /// same desktop app, so their origin is the app's too.
@@ -286,7 +390,7 @@ fn cors() -> CorsLayer {
                 || o.starts_with(b"http://localhost:")
                 || o.starts_with(b"http://127.0.0.1:")
         }))
-        .allow_methods([Method::GET, Method::POST, Method::PATCH])
+        .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::PUT])
         .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
 }
 
@@ -309,6 +413,16 @@ pub fn router(state: AppState) -> Router {
         .route("/api/sales", post(create_sale))
         .route("/api/sales/{id}/receipt", get(get_receipt))
         .route("/api/customers", get(list_customers).post(create_customer))
+        .route("/api/rules", get(get_rules).put(put_rules))
+        .route("/api/actions", post(record_action))
+        .route("/api/activity", get(activity))
+        .route("/api/returns", post(create_return))
+        .route("/api/returns/sale/{receipt_no}", get(sale_for_return))
+        .route("/api/returns/{id}/slip", get(return_slip))
+        .route("/api/shifts/{id}/summary", get(shift_summary))
+        .route("/api/shifts/{id}/count", post(shift_count))
+        .route("/api/shifts/{id}/close", post(shift_close))
+        .route("/api/cash-moves", post(cash_move))
         .layer(cors())
         .with_state(state)
 }

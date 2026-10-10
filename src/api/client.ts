@@ -1,4 +1,7 @@
 import type {
+  ActivityEntry,
+  ApprovalInput,
+  ApprovalRules,
   BarcodeHit,
   Customer,
   Health,
@@ -6,8 +9,13 @@ import type {
   LoginTile,
   Product,
   Receipt,
+  ReturnInput,
+  ReturnSlip,
+  SaleForReturn,
   SaleInput,
   Shift,
+  ShiftSummary,
+  TillAction,
   User,
 } from './types';
 
@@ -17,6 +25,10 @@ export class ApiError extends Error {
     public status: number,
     public code: string,
     message: string,
+    /** Why, in a form the till can translate (e.g. `stock.short`). */
+    public reason: string | null = null,
+    /** Values the message was built from. */
+    public params: Record<string, unknown> = {},
   ) {
     super(message);
   }
@@ -48,13 +60,13 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     throw new ApiError(0, 'network', "Can't reach the main PC. Check the network.");
   }
   if (!res.ok) {
-    let data: { error?: string; message?: string } = {};
+    let data: { error?: string; message?: string; reason?: string; params?: Record<string, unknown> } = {};
     try {
       data = await res.json();
     } catch {
       // not JSON; fall back to the status text
     }
-    throw new ApiError(res.status, data.error ?? 'http_error', data.message ?? res.statusText);
+    throw new ApiError(res.status, data.error ?? 'http_error', data.message ?? res.statusText, data.reason ?? null, data.params ?? {});
   }
   return (await res.json()) as T;
 }
@@ -84,4 +96,20 @@ export const api = {
   receipt: (id: string) => request<Receipt>('GET', `/api/sales/${encodeURIComponent(id)}/receipt`),
   customers: (q = '') => request<Customer[]>('GET', `/api/customers?q=${encodeURIComponent(q)}`),
   createCustomer: (input: { name: string; phone?: string }) => request<Customer>('POST', '/api/customers', input),
+  rules: () => request<ApprovalRules>('GET', '/api/rules'),
+  saveRules: (rules: ApprovalRules) => request<ApprovalRules>('PUT', '/api/rules', rules),
+  recordAction: (input: { action: TillAction; tillCode: string; details?: unknown; approval?: ApprovalInput }) =>
+    request<{ ok: boolean; approvedBy: string | null }>('POST', '/api/actions', input),
+  activity: (date: string, filter = 'all') =>
+    request<ActivityEntry[]>('GET', `/api/activity?date=${encodeURIComponent(date)}&filter=${encodeURIComponent(filter)}`),
+  saleForReturn: (receiptNo: string) =>
+    request<SaleForReturn>('GET', `/api/returns/sale/${encodeURIComponent(receiptNo.trim())}`),
+  createReturn: (input: ReturnInput) => request<ReturnSlip>('POST', '/api/returns', input),
+  shiftSummary: (id: string) => request<ShiftSummary>('GET', `/api/shifts/${encodeURIComponent(id)}/summary`),
+  countCash: (id: string, denominations: Record<string, number>) =>
+    request<ShiftSummary>('POST', `/api/shifts/${encodeURIComponent(id)}/count`, { denominations }),
+  closeShift: (id: string, note: string | null) =>
+    request<ShiftSummary>('POST', `/api/shifts/${encodeURIComponent(id)}/close`, { note }),
+  cashMove: (input: { tillCode: string; kind: 'in' | 'out'; amount: number; reason: string; approval?: ApprovalInput }) =>
+    request<ShiftSummary>('POST', '/api/cash-moves', input),
 };

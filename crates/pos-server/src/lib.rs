@@ -11,8 +11,11 @@ pub mod db;
 pub mod error;
 pub mod pricing;
 pub mod products;
+pub mod returns;
+pub mod rules;
 pub mod sales;
 pub mod seed;
+pub mod shifts;
 pub mod store;
 
 use std::{net::SocketAddr, path::PathBuf};

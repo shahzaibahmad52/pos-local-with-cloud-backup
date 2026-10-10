@@ -1,12 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { createPortal } from 'react-dom';
 import { api, ApiError, setToken } from '../api/client';
-import type { Customer, Language, LoginTile, PaymentMethod, Product, Receipt, ReceiptLanguage, Shift, StoreHeader, User } from '../api/types';
+import type {
+  ApprovalInput,
+  ApprovalRules,
+  Customer,
+  Language,
+  PaymentMethod,
+  Product,
+  Receipt,
+  ReceiptLanguage,
+  Shift,
+  StoreHeader,
+  TillAction,
+  User,
+} from '../api/types';
+import { ApprovalDialog } from '../components/ApprovalDialog';
+import { CashMoveDialog } from '../components/CashMoveDialog';
 import { BrandMark, LanguageToggle, SearchIcon, TrashIcon } from '../components/common';
-import { Receipt80 } from '../components/Receipt80';
+import { PrinterSetup } from '../components/PrinterSetup';
 import { addToCart, baseQtyOnBill, cartTotals, priceLine, toSaleLines, type CartLine, type WeightLine } from '../domain/cart';
 import { formatGrams, formatRs, parseRupees } from '../domain/money';
+import { describeError } from '../i18n/errors';
 import { useI18n } from '../i18n/i18n';
+import type { StringKey } from '../i18n/strings';
+import { DocView, PrintPortal } from '../print/DocView';
+import { saleDoc } from '../print/doc';
+import { canPrintDirect, openDrawer, printDoc, type PrinterSettings } from '../print/printer';
 
 const METHODS: PaymentMethod[] = ['cash', 'card', 'jazzcash', 'easypaisa', 'khata'];
 const DISCOUNTS = [0, 500, 1000];
@@ -24,12 +43,12 @@ function monthsUntil(expiry: string | null): number | null {
   return (y - now.getFullYear()) * 12 + (m - (now.getMonth() + 1));
 }
 
-function readAutoPrint(): boolean {
-  try {
-    return window.localStorage.getItem('medstore.autoPrint') !== '0';
-  } catch {
-    return true;
-  }
+/** A till action waiting for a manager PIN. */
+interface PendingAction {
+  action: TillAction;
+  message: string;
+  details: unknown;
+  run: () => Promise<void> | void;
 }
 
 export function Till({
@@ -37,13 +56,26 @@ export function Till({
   shift,
   store,
   tillCode,
+  printer,
+  onPrinterChange,
   onSignOut,
+  onOpenReturns,
+  onCloseShift,
+  onOpenActivity,
+  active = true,
 }: {
   user: User;
   shift: Shift;
   store: StoreHeader;
   tillCode: string;
+  printer: PrinterSettings;
+  onPrinterChange: (p: PrinterSettings) => void;
   onSignOut: () => void;
+  onOpenReturns: () => void;
+  onCloseShift: () => void;
+  onOpenActivity: () => void;
+  /** False while another screen (returns, shift close…) is on top. */
+  active?: boolean;
 }) {
   const { t, lang, setLang } = useI18n();
   const [lines, setLines] = useState<CartLine[]>([]);
@@ -62,6 +94,10 @@ export function Till({
   const [approvalNeeded, setApprovalNeeded] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [online, setOnline] = useState(true);
+  const [rules, setRules] = useState<ApprovalRules | null>(null);
+  const [pending, setPending] = useState<PendingAction | null>(null);
+  const [dialog, setDialog] = useState<'cash' | 'printer' | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const totals = useMemo(() => cartTotals(lines, discountBp), [lines, discountBp]);
@@ -75,6 +111,37 @@ export function Till({
     api.customers().then(setCustomers).catch(() => undefined);
   }, []);
   useEffect(loadCustomers, [loadCustomers]);
+  useEffect(() => {
+    api.rules().then(setRules).catch(() => undefined);
+  }, []);
+
+  const showError = (e: unknown) => setError(describeError(e, lang));
+
+  /**
+   * Runs a till action that the owner may have put behind a manager PIN.
+   * It is always written to the activity log.
+   */
+  const guarded = async (action: TillAction, needsPin: boolean, message: StringKey, details: unknown, run: () => Promise<void> | void) => {
+    setError(null);
+    if (needsPin && user.role !== 'admin') {
+      setPending({ action, message: t(message), details, run });
+      return;
+    }
+    try {
+      await api.recordAction({ action, tillCode, details });
+      await run();
+    } catch (e) {
+      showError(e);
+    }
+  };
+
+  const approvePending = async (approval: ApprovalInput) => {
+    if (!pending) return;
+    await api.recordAction({ action: pending.action, tillCode, details: pending.details, approval });
+    const run = pending.run;
+    setPending(null);
+    await run();
+  };
 
   // Connection to the main PC.
   useEffect(() => {
@@ -105,7 +172,7 @@ export function Till({
           setResults(r);
           setHighlight(0);
         })
-        .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+        .catch(showError);
     }, 150);
     return () => window.clearTimeout(id);
   }, [query]);
@@ -129,7 +196,7 @@ export function Till({
         return;
       } catch (e) {
         if (!(e instanceof ApiError && e.status === 404)) {
-          setError(e instanceof ApiError ? e.message : String(e));
+          showError(e);
           return;
         }
       }
@@ -146,7 +213,15 @@ export function Till({
         .map((l) => (l.key === key ? ({ ...l, ...patch } as CartLine) : l))
         .filter((l) => l.kind === 'weight' || l.qty > 0),
     );
-  const remove = (key: string) => setLines((current) => current.filter((l) => l.key !== key));
+  const dropLine = (key: string) => setLines((current) => current.filter((l) => l.key !== key));
+  const remove = (line: CartLine) =>
+    void guarded(
+      'remove_item',
+      !!rules?.removeItem,
+      'approvalRemoveItem',
+      { product: line.product.name, qty: line.kind === 'unit' ? line.qty : priceLine(line).grams },
+      () => dropLine(line.key),
+    );
 
   const resetBill = () => {
     setLines([]);
@@ -158,11 +233,27 @@ export function Till({
     setError(null);
     setReceipt(null);
     setApprovalNeeded(null);
+    setNotice(null);
     loadCustomers();
     window.setTimeout(focusSearch, 0);
   };
 
-  const pay = async (approval?: { userId: string; secret: string }) => {
+  const cancelBill = () =>
+    void guarded(
+      'cancel_bill',
+      !!rules?.cancelBill,
+      'approvalCancelBill',
+      { items: lines.length, total: totals.total },
+      resetBill,
+    );
+
+  const noSaleDrawer = () =>
+    void guarded('no_sale_drawer', !!rules?.noSaleDrawer, 'approvalNoSale', {}, async () => {
+      await openDrawer(printer);
+      setNotice(t('drawerOpened'));
+    });
+
+  const pay = async (approval?: ApprovalInput) => {
     if (lines.length === 0 || busy) return;
     setError(null);
     if (method === 'khata' && !customerId) return setError(t('khataNeedsCustomer'));
@@ -182,12 +273,22 @@ export function Till({
       });
       setApprovalNeeded(null);
       setReceipt(r);
-      if (readAutoPrint()) window.setTimeout(() => window.print(), 150);
+      const cashSale = method === 'cash';
+      const doc = saleDoc(r, r.customerReceiptLanguage ?? r.store.receiptLanguage);
+      const drawer = cashSale && printer.openDrawerOnCash;
+      const job = printer.autoPrint
+        ? printDoc(doc, printer, { openDrawer: drawer })
+        : drawer && canPrintDirect(printer)
+          ? openDrawer(printer)
+          : Promise.resolve();
+      job.catch((e) => setError(t('printFailed', { msg: String(e) })));
     } catch (e) {
-      if (e instanceof ApiError && e.code === 'approval_required') {
-        setApprovalNeeded(e.message);
+      if (e instanceof ApiError && e.code === 'approval_required' && !approval) {
+        setApprovalNeeded(describeError(e, lang));
+      } else if (approval) {
+        throw e;
       } else {
-        setError(e instanceof ApiError ? e.message : String(e));
+        showError(e);
       }
     } finally {
       setBusy(false);
@@ -196,17 +297,21 @@ export function Till({
 
   // Keyboard shortcuts from the design: F2 search, F12 pay, Esc clear.
   useEffect(() => {
+    if (!active) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'F2') {
         e.preventDefault();
         focusSearch();
+      } else if (e.key === 'F9' && !receipt) {
+        e.preventDefault();
+        onOpenReturns();
       } else if (e.key === 'F12') {
         e.preventDefault();
         if (receipt) resetBill();
         else void pay();
       } else if (e.key === 'Escape') {
         if (receipt) resetBill();
-        else if (!approvalNeeded) {
+        else if (!approvalNeeded && !pending && !dialog) {
           setQuery('');
           setResults(null);
         }
@@ -229,6 +334,8 @@ export function Till({
 
   const shiftTime = new Date(shift.openedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   const receiptLanguage: ReceiptLanguage = receipt?.customerReceiptLanguage ?? receipt?.store.receiptLanguage ?? 'en';
+  const receiptDoc = receipt ? saleDoc(receipt, receiptLanguage) : null;
+  const isAdmin = user.role === 'admin';
 
   return (
     <div className="till app">
@@ -248,8 +355,27 @@ export function Till({
           <span className="pill pill-bad" role="status">{t('offline')}</span>
         )}
         <LanguageToggle value={lang} onChange={changeLanguage} onNight />
-        <button type="button" className="head-btn" onClick={signOut}>{t('signOut')}</button>
+        <nav aria-label="Till actions" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <button type="button" className="head-btn" onClick={onOpenReturns}>{t('headReturns')} <kbd>F9</kbd></button>
+          <button type="button" className="head-btn" onClick={() => setDialog('cash')}>{t('headCash')}</button>
+          {canPrintDirect(printer) && (
+            <button type="button" className="head-btn" onClick={noSaleDrawer}>{t('headDrawer')}</button>
+          )}
+          {isAdmin && (
+            <>
+              <button type="button" className="head-btn" onClick={onOpenActivity}>{t('headActivity')}</button>
+              <button type="button" className="head-btn" onClick={() => setDialog('printer')}>{t('headPrinter')}</button>
+            </>
+          )}
+          <button type="button" className="head-btn" onClick={onCloseShift}>{t('headCloseShift')}</button>
+          <button type="button" className="head-btn" onClick={signOut}>{t('signOut')}</button>
+        </nav>
       </header>
+      {notice && (
+        <div className="alert alert-ok" role="status" style={{ margin: '12px 20px 0' }}>
+          {notice}
+        </div>
+      )}
 
       <div className="till-body">
         <section className="bill" aria-label="Bill">
@@ -369,7 +495,13 @@ export function Till({
                               ))}
                             </div>
                             <div className="qty">
-                              <button type="button" aria-label="Decrease quantity" onClick={() => update(line.key, { qty: line.qty - 1 })}>−</button>
+                              <button
+                                type="button"
+                                aria-label="Decrease quantity"
+                                onClick={() => (line.qty <= 1 ? remove(line) : update(line.key, { qty: line.qty - 1 }))}
+                              >
+                                −
+                              </button>
                               <input
                                 aria-label="Quantity"
                                 inputMode="numeric"
@@ -389,7 +521,7 @@ export function Till({
                           {line.kind === 'weight' ? `${formatRs(priced.unitPrice)} ${t('perKg')}` : formatRs(priced.unitPrice)}
                         </span>
                         <span className="end num" style={{ fontWeight: 600 }}>{formatRs(priced.total)}</span>
-                        <button type="button" className="icon-btn" aria-label={t('removeItem')} onClick={() => remove(line.key)}>
+                        <button type="button" className="icon-btn" aria-label={t('removeItem')} onClick={() => remove(line)}>
                           <TrashIcon />
                         </button>
                       </div>
@@ -511,7 +643,7 @@ export function Till({
           {error && <div className="alert alert-bad" role="alert">{error}</div>}
 
           <div className="grid-2" style={{ gridTemplateColumns: '1fr' }}>
-            <button type="button" className="btn btn-danger" onClick={resetBill} disabled={lines.length === 0 || busy}>
+            <button type="button" className="btn btn-danger" onClick={cancelBill} disabled={lines.length === 0 || busy}>
               {t('cancelBill')}
             </button>
           </div>
@@ -528,21 +660,38 @@ export function Till({
       </footer>
 
       {approvalNeeded && (
-        <ApprovalDialog
-          message={approvalNeeded}
-          busy={busy}
-          onCancel={() => setApprovalNeeded(null)}
-          onApprove={(userId, secret) => void pay({ userId, secret })}
-          error={error}
+        <ApprovalDialog message={approvalNeeded} onApprove={(a) => pay(a)} onCancel={() => setApprovalNeeded(null)} />
+      )}
+      {pending && <ApprovalDialog message={pending.message} onApprove={approvePending} onCancel={() => setPending(null)} />}
+      {dialog === 'cash' && (
+        <CashMoveDialog
+          tillCode={tillCode}
+          onCancel={() => setDialog(null)}
+          onDone={() => {
+            setDialog(null);
+            setNotice(t('saved'));
+          }}
+        />
+      )}
+      {dialog === 'printer' && (
+        <PrinterSetup
+          settings={printer}
+          store={store}
+          tillCode={tillCode}
+          onClose={() => setDialog(null)}
+          onSaved={(p) => {
+            onPrinterChange(p);
+            setDialog(null);
+          }}
         />
       )}
 
-      {receipt && (
+      {receipt && receiptDoc && (
         <>
           <div className="overlay" role="dialog" aria-modal="true" aria-label={t('saleDone')}>
             <div className="dialog receipt-dialog">
               <div className="receipt-preview">
-                <Receipt80 receipt={receipt} language={receiptLanguage} />
+                <DocView doc={receiptDoc} />
               </div>
               <div className="actions">
                 <h2>{t('saleDone')}</h2>
@@ -552,19 +701,17 @@ export function Till({
                     {t('changeToGive', { amount: formatRs(receipt.changeDue) })}
                   </div>
                 )}
-                <button type="button" className="btn" onClick={() => window.print()}>{t('print')}</button>
+                {error && <div className="alert alert-bad">{error}</div>}
+                <button type="button" className="btn" onClick={() => void printDoc(receiptDoc, printer).catch((e) => setError(t('printFailed', { msg: String(e) })))}>
+                  {t('print')}
+                </button>
                 <button type="button" className="btn btn-primary btn-lg" onClick={resetBill} autoFocus>
                   {t('newSale')} <kbd>Esc</kbd>
                 </button>
               </div>
             </div>
           </div>
-          {createPortal(
-            <div className="print-root">
-              <Receipt80 receipt={receipt} language={receiptLanguage} />
-            </div>,
-            document.body,
-          )}
+          <PrintPortal doc={receiptDoc} />
         </>
       )}
     </div>
@@ -648,62 +795,5 @@ function NewCustomerForm({ onCreated, onCancel }: { onCreated: (c: Customer) => 
         <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>{t('save')}</button>
       </div>
     </form>
-  );
-}
-
-function ApprovalDialog({
-  message,
-  busy,
-  error,
-  onApprove,
-  onCancel,
-}: {
-  message: string;
-  busy: boolean;
-  error: string | null;
-  onApprove: (userId: string, secret: string) => void;
-  onCancel: () => void;
-}) {
-  const { t } = useI18n();
-  const [approvers, setApprovers] = useState<LoginTile[]>([]);
-  const [who, setWho] = useState('');
-  const [secret, setSecret] = useState('');
-  useEffect(() => {
-    api.loginTiles().then((list) => {
-      const can = list.filter((u) => u.canApprove);
-      setApprovers(can);
-      if (can[0]) setWho(can[0].id);
-    });
-  }, []);
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    if (who && secret) onApprove(who, secret);
-  };
-  return (
-    <div className="overlay" role="dialog" aria-modal="true" aria-labelledby="approval-title">
-      <form className="dialog" onSubmit={submit}>
-        <h2 id="approval-title">{t('approvalTitle')}</h2>
-        <div className="alert alert-warn">{message}</div>
-        <div className="field">
-          <span className="label">{t('approvalWho')}</span>
-          <div className="tiles">
-            {approvers.map((a) => (
-              <button key={a.id} type="button" className="tile" aria-pressed={who === a.id} onClick={() => setWho(a.id)}>
-                <span className="tile-name">{a.name}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="field">
-          <label className="label" htmlFor="approval-secret">{t('approvalSecret')}</label>
-          <input id="approval-secret" type="password" className="input ltr" value={secret} onChange={(e) => setSecret(e.target.value)} autoFocus autoComplete="off" />
-        </div>
-        {error && <div className="alert alert-bad">{error}</div>}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" className="btn" onClick={onCancel}>{t('cancel')}</button>
-          <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={busy || !secret}>{t('approve')}</button>
-        </div>
-      </form>
-    </div>
   );
 }

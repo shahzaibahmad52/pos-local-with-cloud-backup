@@ -4,7 +4,36 @@ Point-of-sale for a medicine and general store in Pakistan. It is built to work 
 
 UI design (all screens): https://claude.ai/artifact/DdLH1Rp4aDxSGTM2m2EKUz
 
-## What works now (milestone 1: foundation + Till)
+## What works now
+
+### Milestone 2: daily control
+
+- **Returns / refunds** (<kbd>F9</kbd>):
+  - Scan the receipt barcode (or type the receipt number). Choose quantity, reason and condition per item.
+  - Sealed items go back into **their original batch**. Damaged or expired items are written off instead.
+  - The refund is the item's share **after the bill's discount**. It can be given as cash, khata credit, card or wallet.
+  - Fridge items are refused, refunds above Rs 500 need a manager PIN, and a sale can never be refunded more than was paid.
+- **Close shift with a blind count:**
+  - The cashier types how many of each note and coin are in the drawer. The expected amount stays hidden until they submit.
+  - Expected cash = opening cash + cash sales + cash in − cash out − cash refunds.
+  - One recount is allowed. A difference over Rs 100 needs a note.
+  - Closing prints a Z-report and locks the shift.
+- **Cash in / out** of the drawer during a shift, e.g. generator fuel or change from the bank.
+- **Manager PIN rules**, set by the owner and applied on every till:
+  - Discount limit and refund limit.
+  - Removing a scanned item, cancelling a bill, taking cash out, opening the drawer without a sale.
+  - A senior cashier can be given an approver PIN.
+- **Activity log** for the owner, which can't be edited or deleted:
+  - Every approval, refund, cash movement, count, shift close and lockout.
+  - Filters for "needs attention", approvals, money and stock.
+  - Totals for the day.
+- **Direct printing (desktop app):**
+  - Each receipt, return slip and Z-report is drawn as an image and sent straight to the 80 mm / 58 mm thermal printer: no dialog, paper cut, and the cash drawer opens on cash sales. Because it's an image, **Urdu prints on any thermal printer**.
+  - Printer setup is per till, from the Till header (owner only), with test print and test drawer buttons.
+  - In a plain browser the print dialog is used instead.
+- **Server messages in Urdu:** errors carry a code and values, so an Urdu-speaking cashier sees messages like "stock short" or "PIN needed" in Urdu.
+
+### Milestone 1: foundation + Till
 
 - **Store server** (`crates/pos-server`): the store's SQLite database and the sale rules, served to every till in the shop over the local network.
   - **Batches:** stock is kept per batch and sold earliest-expiry first. Expired stock is never sold, and each batch keeps the price printed on its pack.
@@ -26,7 +55,7 @@ UI design (all screens): https://claude.ai/artifact/DdLH1Rp4aDxSGTM2m2EKUz
 - **Desktop app** (`src-tauri`, Tauri 2):
   - On first start you choose whether the PC is the **main PC** (it runs the store server and database) or an **extra till** (it connects to the main PC's address).
 
-Not built yet: backoffice screens, returns, shift close, stock count, transfers, reports, cloud sync, silent ESC/POS printing. See the roadmap below.
+Not built yet: backoffice screens, stock count, transfers, reports, cloud sync. See the roadmap below.
 
 ## How it fits together
 
@@ -95,24 +124,25 @@ To set up a second till in the same shop:
 
 ### Printing
 
-The receipt is laid out for 80 mm paper and printed through Windows' print dialog:
-1. Choose the thermal printer.
-2. Set the paper to 80 mm.
-3. Tick "remember".
+1. Sign in as the owner on the till.
+2. Click **Printer** in the header and pick the thermal printer (USB or network, as installed in Windows).
+3. Choose 80 mm or 58 mm paper, then try **Print test receipt** and **Test cash drawer**.
 
-Silent printing (no dialog, opens the cash drawer) is planned for milestone 2. Urdu receipts will be sent to the printer as an image so they work on any thermal printer.
+The drawer must be cabled to the printer (RJ11 "DK" port); the app sends the standard pulse on pin 2. If no printer is chosen, the normal Windows print dialog is used.
 
 ## Project layout
 
 ```
-crates/pos-server/   Store server: database, migrations, sale rules, HTTP API (Rust, axum, rusqlite)
+crates/pos-server/   Store server: database, migrations, sale/return/shift rules, HTTP API (Rust, axum, rusqlite)
   migrations/        SQL schema
-  tests/             End-to-end sale and API tests
+  tests/             End-to-end sale, return, shift and API tests
+crates/pos-printer/  ESC/POS image printing, paper cut, cash drawer; raw printing to Windows printers
 src/                 Till UI (React + TypeScript)
   api/               API client and types
   domain/            Money maths and cart (mirrors the server)
   i18n/              English / Urdu text
-  screens/           Device setup, store setup, sign-in, open shift, Till
+  print/             Receipt / return slip / Z-report layout, screen preview, printer image
+  screens/           Device setup, store setup, sign-in, open shift, Till, Returns, Close shift, Activity
 src-tauri/           Desktop shell: main-PC / extra-till mode, starts the store server
 ```
 
@@ -120,7 +150,7 @@ src-tauri/           Desktop shell: main-PC / extra-till mode, starts the store 
 
 ```bash
 npm run typecheck && npm test && npm run build
-cargo test -p pos-server
+cargo test --workspace --exclude medstore-pos
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
@@ -130,11 +160,10 @@ CI runs all of these on every push.
 ## Roadmap
 
 1. **Foundation + Till** — done.
-2. **Daily control:**
-   - Returns / refunds and Close shift (blind cash count, Z-report).
-   - Manager-approval rules screen and the activity log viewer.
-   - Silent ESC/POS printing with Urdu printed as an image, and opening the cash drawer.
-   - Translating server messages into Urdu.
+2. **Daily control** — done:
+   - Returns, close shift, cash in/out, approval rules and activity log.
+   - Direct ESC/POS printing with Urdu, and the cash drawer.
+   - Urdu server messages.
 3. **Backoffice:**
    - Dashboard, Inventory, Add/Edit product with Excel import, and Purchases (GRN) with supplier payables.
    - Expenses, Customers & Khata, users and settings.

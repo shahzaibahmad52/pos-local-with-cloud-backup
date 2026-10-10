@@ -27,5 +27,17 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: cargo fmt --all -- --check
-      - run: cargo test -p pos-server
+      - run: cargo test --workspace --exclude medstore-pos
       - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  windows-printing:
+    # The raw-printing code only compiles on Windows.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy -p pos-printer -- -D warnings
+      - run: cargo test -p pos-printer

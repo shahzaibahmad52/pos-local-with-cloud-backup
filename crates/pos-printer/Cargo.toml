@@ -1,0 +1,8 @@
+[package]
+name = "pos-printer"
+version = "0.1.0"
+edition = "2021"
+description = "ESC/POS receipt printing: raster image encoding, paper cut, cash drawer, and raw printing to a Windows printer."
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Printing", "Win32_Graphics_Gdi"] }

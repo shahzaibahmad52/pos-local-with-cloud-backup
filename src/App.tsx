@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, ApiError, configureApi } from './api/client';
+import { api, ApiError, configureApi, setToken } from './api/client';
 import type { Shift, StoreHeader, User } from './api/types';
 import { BrandMark } from './components/common';
 import { useI18n } from './i18n/i18n';
+import type { PrinterSettings } from './print/printer';
 import { loadRuntime, type Runtime } from './runtime';
+import { Activity } from './screens/Activity';
 import { DeviceSetup } from './screens/DeviceSetup';
 import { Login } from './screens/Login';
 import { OpenShift } from './screens/OpenShift';
+import { Returns } from './screens/Returns';
+import { ShiftClose } from './screens/ShiftClose';
 import { StoreSetup } from './screens/StoreSetup';
 import { Till } from './screens/Till';
 
@@ -17,12 +21,13 @@ type Stage =
   | { name: 'store-setup' }
   | { name: 'login'; store: StoreHeader }
   | { name: 'open-shift'; store: StoreHeader; user: User }
-  | { name: 'till'; store: StoreHeader; user: User; shift: Shift };
+  | { name: 'till'; store: StoreHeader; user: User; shift: Shift; over: 'returns' | 'close' | 'activity' | null };
 
 export function App() {
   const { t, setLang } = useI18n();
   const [runtime, setRuntime] = useState<Runtime | null>(null);
   const [stage, setStage] = useState<Stage>({ name: 'boot' });
+  const [printer, setPrinter] = useState<PrinterSettings | null>(null);
 
   const connect = useCallback(async () => {
     setStage({ name: 'boot' });
@@ -34,6 +39,7 @@ export function App() {
       return;
     }
     setRuntime(rt);
+    setPrinter(rt.printer);
     if (rt.serverUrl === null) {
       setStage({ name: 'device-setup' });
       return;
@@ -65,7 +71,7 @@ export function App() {
     const tillCode = runtime?.tillCode ?? 'T01';
     try {
       const shift = await api.currentShift(tillCode);
-      if (shift) setStage({ name: 'till', store, user, shift });
+      if (shift) setStage({ name: 'till', store, user, shift, over: null });
       else setStage({ name: 'open-shift', store, user });
     } catch (e) {
       setStage({ name: 'unreachable', message: e instanceof ApiError ? e.message : String(e) });
@@ -120,19 +126,46 @@ export function App() {
         <OpenShift
           user={stage.user}
           tillCode={tillCode}
-          onOpened={(shift) => setStage({ name: 'till', store: stage.store, user: stage.user, shift })}
+          onOpened={(shift) => setStage({ name: 'till', store: stage.store, user: stage.user, shift, over: null })}
           onBack={() => setStage({ name: 'login', store: stage.store })}
         />
       );
-    case 'till':
+    case 'till': {
+      const show = (over: 'returns' | 'close' | 'activity' | null) => setStage({ ...stage, over });
+      const printerSettings = printer ?? runtime!.printer;
+      const signOut = async () => {
+        await api.logout().catch(() => undefined);
+        setToken(null);
+        setStage({ name: 'login', store: stage.store });
+      };
       return (
-        <Till
-          user={stage.user}
-          shift={stage.shift}
-          store={stage.store}
-          tillCode={tillCode}
-          onSignOut={() => setStage({ name: 'login', store: stage.store })}
-        />
+        <>
+          <Till
+            user={stage.user}
+            shift={stage.shift}
+            store={stage.store}
+            tillCode={tillCode}
+            printer={printerSettings}
+            onPrinterChange={setPrinter}
+            active={stage.over === null}
+            onSignOut={() => setStage({ name: 'login', store: stage.store })}
+            onOpenReturns={() => show('returns')}
+            onCloseShift={() => show('close')}
+            onOpenActivity={() => show('activity')}
+          />
+          {stage.over && (
+            <div className="layer">
+              {stage.over === 'returns' && (
+                <Returns user={stage.user} store={stage.store} tillCode={tillCode} printer={printerSettings} onBack={() => show(null)} />
+              )}
+              {stage.over === 'close' && (
+                <ShiftClose shift={stage.shift} store={stage.store} printer={printerSettings} onBack={() => show(null)} onClosed={() => void signOut()} />
+              )}
+              {stage.over === 'activity' && <Activity store={stage.store} onBack={() => show(null)} />}
+            </div>
+          )}
+        </>
       );
+    }
   }
 }

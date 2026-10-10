@@ -168,6 +168,9 @@ h2 { margin: 0; font-size: 18px; }
 .pay-btn { min-height: 68px; border-radius: 12px; font-size: 20px; font-weight: 700; }
 .keys { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 10px 20px; border-top: 1px solid var(--line); background: #fff; font-size: 13px; color: var(--ink-2); }
 
+/* A full screen shown on top of the till (returns, shift close…), so the bill underneath is kept. */
+.layer { position: fixed; inset: 0; z-index: 5; background: var(--ground); overflow: auto; }
+
 /* Dialogs */
 .overlay { position: fixed; inset: 0; background: rgba(19, 35, 29, 0.55); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
 .dialog { background: #fff; border-radius: 14px; padding: 22px; width: 100%; max-width: 460px; max-height: calc(100vh - 32px); overflow: auto; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25); }

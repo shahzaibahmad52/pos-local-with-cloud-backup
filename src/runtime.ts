@@ -2,6 +2,8 @@
 // In the desktop app the answer comes from device.json (see src-tauri);
 // in a plain browser (development) the Vite server proxies /api.
 
+import { DEFAULT_PRINTER, readLocalPrinter, type PrinterSettings } from './print/printer';
+
 export interface DeviceConfig {
   mode: 'main' | 'till' | null;
   mainHost: string | null;
@@ -15,11 +17,12 @@ export interface Runtime {
   serverUrl: string | null;
   tillCode: string;
   config: DeviceConfig;
+  printer: PrinterSettings;
 }
 
-export function isDesktop(): boolean {
-  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-}
+import { isDesktop } from './platform';
+
+export { isDesktop };
 
 function readLocal(key: string): string | null {
   try {
@@ -32,14 +35,17 @@ function readLocal(key: string): string | null {
 export async function loadRuntime(): Promise<Runtime> {
   if (isDesktop()) {
     const { invoke } = await import('@tauri-apps/api/core');
-    const info = await invoke<{ config: Partial<DeviceConfig>; serverUrl: string | null }>('get_runtime_info');
+    const info = await invoke<{ config: Partial<DeviceConfig> & { printer?: Partial<PrinterSettings> }; serverUrl: string | null }>(
+      'get_runtime_info',
+    );
     const config: DeviceConfig = {
       mode: info.config.mode ?? null,
       mainHost: info.config.mainHost ?? null,
       port: info.config.port ?? null,
       tillCode: info.config.tillCode ?? null,
     };
-    return { isDesktop: true, serverUrl: info.serverUrl, tillCode: config.tillCode ?? 'T01', config };
+    const printer = { ...DEFAULT_PRINTER, ...info.config.printer };
+    return { isDesktop: true, serverUrl: info.serverUrl, tillCode: config.tillCode ?? 'T01', config, printer };
   }
   const tillCode = readLocal('medstore.tillCode') ?? 'T01';
   return {
@@ -47,6 +53,7 @@ export async function loadRuntime(): Promise<Runtime> {
     serverUrl: '',
     tillCode,
     config: { mode: 'main', mainHost: null, port: null, tillCode },
+    printer: readLocalPrinter(),
   };
 }
 

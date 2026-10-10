@@ -33,12 +33,7 @@ pub struct PaymentInput {
     pub amount: i64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Approval {
-    pub user_id: String,
-    pub secret: String,
-}
+pub use crate::auth::Approval;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -175,7 +170,10 @@ fn allocate_fefo(
         if expired > 0 {
             msg.push_str(&format!(" ({expired} {base_unit} are expired and can't be sold.)"));
         }
-        return Err(AppError::Stock(msg));
+        return Err(AppError::Stock(msg).because(
+            "stock.short",
+            json!({ "product": product_name, "need": base_qty, "have": available, "unit": base_unit, "expired": expired }),
+        ));
     }
     Ok(out)
 }
@@ -287,7 +285,7 @@ pub fn create_sale(conn: &mut Connection, auth: &Auth, user: &User, input: &Sale
         return Err(AppError::BadRequest("Till code must be letters, digits or '-' (e.g. T01).".into()));
     }
     if input.lines.is_empty() {
-        return Err(AppError::BadRequest("The bill is empty.".into()));
+        return Err(AppError::BadRequest("The bill is empty.".into()).because("bill.empty", json!({})));
     }
     if !(0..=10_000).contains(&input.discount_bp) {
         return Err(AppError::BadRequest("Discount must be between 0% and 100%.".into()));
@@ -302,16 +300,7 @@ pub fn create_sale(conn: &mut Connection, auth: &Auth, user: &User, input: &Sale
     }
 
     // Manager approval is checked once, up front, and only if supplied.
-    let approver: Option<User> = match &input.approval {
-        Some(a) => {
-            let approver = auth.check_secret(conn, &a.user_id, &a.secret)?;
-            if !approver.may_approve() {
-                return Err(AppError::Forbidden(format!("{} can't approve this.", approver.name)));
-            }
-            Some(approver)
-        }
-        None => None,
-    };
+    let approver = auth.approver(conn, input.approval.as_ref())?;
     let approved = user.is_admin() || approver.is_some();
 
     let max_discount = db::setting_i64(conn, "cashier_max_discount_bp", 500)?;
@@ -319,7 +308,8 @@ pub fn create_sale(conn: &mut Connection, auth: &Auth, user: &User, input: &Sale
         return Err(AppError::ApprovalRequired(format!(
             "A discount above {}% needs a manager PIN.",
             max_discount as f64 / 100.0
-        )));
+        ))
+        .because("approval.discount", json!({ "maxPercent": max_discount as f64 / 100.0 })));
     }
     let weight_round_to = db::setting_i64(conn, "weight_round_to_paisa", 100)?;
     let store_code = store_code(conn)?;
@@ -356,11 +346,13 @@ pub fn create_sale(conn: &mut Connection, auth: &Auth, user: &User, input: &Sale
         }
     }
     if paid < total {
-        return Err(AppError::BadRequest(format!("Payment is short by Rs {}.", fmt_rs(total - paid))));
+        return Err(AppError::BadRequest(format!("Payment is short by Rs {}.", fmt_rs(total - paid)))
+            .because("payment.short", json!({ "amount": total - paid })));
     }
     let change_due = paid - total;
     if change_due > cash {
-        return Err(AppError::BadRequest("Only cash can be given back as change.".into()));
+        return Err(AppError::BadRequest("Only cash can be given back as change.".into())
+            .because("payment.change_not_cash", json!({})));
     }
 
     let customer: Option<(String, i64)> = match &input.customer_id {
@@ -375,7 +367,9 @@ pub fn create_sale(conn: &mut Connection, auth: &Auth, user: &User, input: &Sale
     };
     if khata > 0 {
         let Some((cname, limit)) = &customer else {
-            return Err(AppError::BadRequest("Choose the khata customer first.".into()));
+            return Err(
+                AppError::BadRequest("Choose the khata customer first.".into()).because("khata.no_customer", json!({}))
+            );
         };
         let cid = input.customer_id.as_deref().unwrap_or_default();
         let balance = khata_balance(&tx, cid)?;
@@ -384,7 +378,8 @@ pub fn create_sale(conn: &mut Connection, auth: &Auth, user: &User, input: &Sale
                 "{cname}'s khata would be Rs {} (limit Rs {}). A manager PIN is needed.",
                 fmt_rs(balance + khata),
                 fmt_rs(*limit)
-            )));
+            ))
+            .because("approval.khata", json!({ "customer": cname, "balance": balance + khata, "limit": limit })));
         }
     }
 
@@ -611,7 +606,7 @@ pub fn receipt(conn: &Connection, sale_id: &str) -> AppResult<Option<Receipt>> {
     Ok(Some(rec))
 }
 
-fn fmt_rs(paisa: i64) -> String {
+pub fn fmt_rs(paisa: i64) -> String {
     let rupees = paisa / 100;
     let rest = (paisa % 100).abs();
     let mut digits = rupees.abs().to_string();

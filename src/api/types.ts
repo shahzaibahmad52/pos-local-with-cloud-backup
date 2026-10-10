@@ -106,7 +106,7 @@ export interface SaleInput {
   discountBp: number;
   payments: { method: PaymentMethod; amount: number }[];
   clientRef: string;
-  approval?: { userId: string; secret: string };
+  approval?: ApprovalInput;
 }
 
 export interface ReceiptLine {
@@ -138,5 +138,113 @@ export interface Receipt {
   changeDue: number;
   payments: { method: PaymentMethod; amount: number }[];
   khataBalance: number | null;
+  store: StoreHeader;
+}
+
+export interface ApprovalInput {
+  userId: string;
+  secret: string;
+}
+
+export interface ApprovalRules {
+  cashierMaxDiscountBp: number;
+  refundApprovalAbove: number;
+  removeItem: boolean;
+  cancelBill: boolean;
+  cashOut: boolean;
+  noSaleDrawer: boolean;
+}
+
+export type TillAction = 'remove_item' | 'cancel_bill' | 'no_sale_drawer';
+
+export interface ActivityEntry {
+  id: string;
+  createdAt: string;
+  tillCode: string | null;
+  userName: string | null;
+  action: string;
+  details: Record<string, unknown> | null;
+  approvedByName: string | null;
+  flagged: boolean;
+}
+
+export interface ReturnableLine {
+  saleLineId: string;
+  productName: string;
+  unitName: string;
+  sellMode: 'unit' | 'weight';
+  qty: number;
+  returnedQty: number;
+  unitPrice: number;
+  lineTotal: number;
+  batchNo: string | null;
+  batchExpiry: string | null;
+  blocked: string | null;
+}
+
+export interface SaleForReturn {
+  id: string;
+  receiptNo: string;
+  createdAt: string;
+  cashierName: string;
+  customerId: string | null;
+  customerName: string | null;
+  subtotal: number;
+  total: number;
+  refundedSoFar: number;
+  paymentMethods: PaymentMethod[];
+  lines: ReturnableLine[];
+}
+
+export type ReturnCondition = 'restock' | 'damaged' | 'expired';
+export type RefundMethod = 'cash' | 'khata' | 'card' | 'jazzcash' | 'easypaisa';
+
+export interface ReturnInput {
+  saleId: string;
+  tillCode: string;
+  lines: { saleLineId: string; qty: number; condition: ReturnCondition; reason?: string }[];
+  refundMethod: RefundMethod;
+  clientRef: string;
+  approval?: ApprovalInput;
+}
+
+export interface ReturnSlip {
+  id: string;
+  returnNo: string;
+  saleReceiptNo: string;
+  createdAt: string;
+  tillCode: string;
+  cashierName: string;
+  customerName: string | null;
+  lines: { productName: string; unitName: string; sellMode: 'unit' | 'weight'; qty: number; refund: number; condition: ReturnCondition }[];
+  refundTotal: number;
+  refundMethod: RefundMethod;
+  approvedByName: string | null;
+  khataBalance: number | null;
+  store: StoreHeader;
+}
+
+export interface ShiftSummary {
+  id: string;
+  tillCode: string;
+  cashierName: string;
+  openedAt: string;
+  closedAt: string | null;
+  status: 'open' | 'closed';
+  openingCash: number;
+  billCount: number;
+  salesTotal: number;
+  cashSales: number;
+  cashRefunds: number;
+  refundsTotal: number;
+  returnsCount: number;
+  cashIn: number;
+  cashOut: number;
+  otherPayments: Record<string, number>;
+  expectedCash: number | null;
+  countedCash: number | null;
+  difference: number | null;
+  countAttempts: number;
+  note: string | null;
   store: StoreHeader;
 }

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/pos-server", "src-tauri"]
+members = ["crates/pos-server", "crates/pos-printer", "src-tauri"]
 
 [profile.release]
 opt-level = 3

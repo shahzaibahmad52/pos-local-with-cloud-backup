@@ -3,7 +3,6 @@
 use pos_server::{
     auth::{self, Auth, User},
     db,
-    error::AppError,
     products::{self, ProductView},
     sales::{self, Approval, PaymentInput, SaleInput, SaleLineInput},
     seed,
@@ -122,10 +121,8 @@ fn expired_stock_is_never_sold() {
         &sale(vec![units_line(&flagyl, "Strip", 13)], cash(100_000)),
     )
     .unwrap_err();
-    match err {
-        AppError::Stock(msg) => assert!(msg.contains("expired"), "{msg}"),
-        other => panic!("expected stock error, got {other:?}"),
-    }
+    assert_eq!(err.code(), "insufficient_stock");
+    assert!(err.to_string().contains("expired"), "{err}");
     assert_eq!(batch_qty(&conn, "FG-100"), 50);
     assert_eq!(batch_qty(&conn, "FG-209"), 120);
 }
@@ -138,7 +135,7 @@ fn two_lines_of_one_product_cannot_oversell() {
     assert_eq!(aug.stock_base, 84);
     let lines = vec![units_line(&aug, "Strip", 14), units_line(&aug, "Tab", 1)];
     let err = sales::create_sale(&mut conn, &Auth::default(), &ali, &sale(lines, cash(1_000_000))).unwrap_err();
-    assert!(matches!(err, AppError::Stock(_)), "{err:?}");
+    assert!(err.code() == "insufficient_stock", "{err:?}");
     assert_eq!(batch_qty(&conn, "AG-118"), 84, "nothing is taken when the sale fails");
 }
 
@@ -184,10 +181,10 @@ fn big_discount_needs_a_manager_pin() {
     let mut input = sale(vec![units_line(&risek, "Strip", 1)], cash(36_000));
     input.discount_bp = 1_500;
     let err = sales::create_sale(&mut conn, &auth, &ali, &input).unwrap_err();
-    assert!(matches!(err, AppError::ApprovalRequired(_)), "{err:?}");
+    assert!(err.code() == "approval_required", "{err:?}");
 
     input.approval = Some(Approval { user_id: sana.id.clone(), secret: "0000".into() });
-    assert!(matches!(sales::create_sale(&mut conn, &auth, &ali, &input).unwrap_err(), AppError::Forbidden(_)));
+    assert!(sales::create_sale(&mut conn, &auth, &ali, &input).unwrap_err().code() == "forbidden");
 
     input.approval = Some(Approval { user_id: sana.id.clone(), secret: "2345".into() });
     let r = sales::create_sale(&mut conn, &auth, &ali, &input).unwrap();
@@ -214,7 +211,7 @@ fn khata_needs_a_customer_and_respects_the_limit() {
 
     let err = sales::create_sale(&mut conn, &auth, &ali, &sale(vec![units_line(&brufen, "Bottle", 1)], khata(15_000)))
         .unwrap_err();
-    assert!(matches!(err, AppError::BadRequest(_)), "{err:?}");
+    assert!(err.code() == "bad_request", "{err:?}");
 
     let mut input = sale(vec![units_line(&brufen, "Bottle", 2)], khata(30_000));
     input.customer_id = Some(imran.clone());
@@ -230,7 +227,7 @@ fn khata_needs_a_customer_and_respects_the_limit() {
     let mut over = sale(lines, khata(978_000));
     over.customer_id = Some(imran.clone());
     let err = sales::create_sale(&mut conn, &auth, &ali, &over).unwrap_err();
-    assert!(matches!(err, AppError::ApprovalRequired(_)), "{err:?}");
+    assert!(err.code() == "approval_required", "{err:?}");
 
     // The owner can allow it.
     let owner = user(&conn, "Owner");
@@ -245,10 +242,10 @@ fn payments_must_cover_the_total_and_only_cash_gives_change() {
     let ali = user(&conn, "Ali");
     let brufen = product(&conn, "Brufen");
     let short = sale(vec![units_line(&brufen, "Bottle", 1)], cash(10_000));
-    assert!(matches!(sales::create_sale(&mut conn, &auth, &ali, &short).unwrap_err(), AppError::BadRequest(_)));
+    assert!(sales::create_sale(&mut conn, &auth, &ali, &short).unwrap_err().code() == "bad_request");
     let card_over =
         sale(vec![units_line(&brufen, "Bottle", 1)], vec![PaymentInput { method: "card".into(), amount: 20_000 }]);
-    assert!(matches!(sales::create_sale(&mut conn, &auth, &ali, &card_over).unwrap_err(), AppError::BadRequest(_)));
+    assert!(sales::create_sale(&mut conn, &auth, &ali, &card_over).unwrap_err().code() == "bad_request");
     let split = sale(
         vec![units_line(&brufen, "Bottle", 1)],
         vec![
