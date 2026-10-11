@@ -252,7 +252,7 @@ function SyncStatus({ cloud, onClick }: { cloud: CloudPage | null; onClick: () =
   let colour = '#4fbf98';
   if (!cloud.enabled) {
     text = t('syncOff');
-    colour = '#a9bdb4';
+    colour = '#9fb6cb';
   } else if (cloud.lastError && cloud.pending > 0) {
     text = t('syncWaiting', { n: cloud.pending });
     colour = '#f0a640';
@@ -268,7 +268,7 @@ function SyncStatus({ cloud, onClick }: { cloud: CloudPage | null; onClick: () =
     <button
       type="button"
       onClick={onClick}
-      style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#cfe6dc', background: 'none', border: 0, padding: 0, textAlign: 'start' }}
+      style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#cfe3f3', background: 'none', border: 0, padding: 0, textAlign: 'start' }}
     >
       <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: colour, flex: 'none' }} />
       {text}

@@ -1,24 +1,27 @@
-/* Design tokens from the approved UI design. */
+/* Design tokens. Colours follow the Bizflow logo: its deep blue for the
+   brand, navy for the dark panels, cyan for highlights. */
 :root {
-  --ground: #f4f5f2;
+  --ground: #f3f6f9;
   --surface: #ffffff;
-  --surface-2: #f7f8f6;
-  --soft: #f1f3ef;
-  --soft-2: #e6e9e4;
-  --ink: #17201c;
-  --ink-2: #4a564f;
-  --muted: #5b6660;
-  --line: #dde2dc;
-  --line-2: #eef0ec;
-  --input-line: #c9d0ca;
-  --brand: #0b6b53;
-  --brand-dark: #08513f;
-  --brand-soft: #e3f1ec;
-  --night: #13231d;
-  --night-2: #1b3029;
-  --night-line: #2f4a3f;
-  --night-ink: #e4ece8;
-  --night-muted: #a9bdb4;
+  --surface-2: #f6f8fb;
+  --soft: #eef2f7;
+  --soft-2: #e2e8f0;
+  --ink: #111c2b;
+  --ink-2: #445166;
+  --muted: #5a6678;
+  --line: #d9e0e8;
+  --line-2: #edf1f5;
+  --input-line: #c6d0db;
+  --brand: #076599;
+  --brand-dark: #054e77;
+  --brand-soft: #e3f2fb;
+  --night: #0b2236;
+  --night-2: #12324d;
+  --night-line: #234a6b;
+  --night-ink: #e3edf6;
+  --night-muted: #9fb6cb;
+  --ok-bg: #e6f6ee;
+  --ok-ink: #146c43;
   --warn-bg: #fef3e2;
   --warn-ink: #7a3b06;
   --warn: #b45309;
@@ -27,7 +30,7 @@
   --bad: #b42318;
   --info-bg: #e5ecfb;
   --info-ink: #1e3a8a;
-  --focus: #7cc4ae;
+  --focus: #5cc8f0;
   --font: 'IBM Plex Sans', system-ui, sans-serif;
   --font-ur: 'Noto Nastaliq Urdu', 'IBM Plex Sans', serif;
   --mono: 'IBM Plex Mono', ui-monospace, monospace;
@@ -67,7 +70,7 @@ kbd { font-family: var(--mono); font-size: 12px; font-weight: 600; background: #
 .alert { border-radius: 10px; padding: 12px 14px; font-size: 14px; }
 .alert-warn { background: var(--warn-bg); color: var(--warn-ink); }
 .alert-bad { background: var(--bad-bg); color: var(--bad-ink); }
-.alert-ok { background: var(--brand-soft); color: var(--brand-dark); }
+.alert-ok { background: var(--ok-bg); color: var(--ok-ink); }
 .chip { font-size: 11px; font-weight: 700; border-radius: 4px; padding: 1px 6px; display: inline-block; }
 .chip-rx { background: var(--info-bg); color: var(--info-ink); }
 .chip-warn { background: var(--warn-bg); color: var(--warn-ink); }
@@ -105,7 +108,7 @@ h2 { margin: 0; font-size: 18px; }
 .tile-name { font-size: 16px; font-weight: 600; }
 .tile-sub { font-size: 12px; color: var(--muted); }
 .dots { display: flex; gap: 14px; justify-content: center; padding: 6px 0; direction: ltr; }
-.dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #9aa59f; }
+.dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #9aa8b8; }
 .dot.on { background: var(--brand); border-color: var(--brand); }
 .pinpad { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; direction: ltr; }
 .pinpad button { height: 60px; border-radius: 10px; border: 1px solid var(--line); background: #fff; font-size: 20px; }
@@ -126,7 +129,7 @@ h2 { margin: 0; font-size: 18px; }
 .till-head .who { display: flex; align-items: center; gap: 10px; flex: 1 1 260px; }
 .till-head .who .brand-mark { width: 34px; height: 34px; border-radius: 8px; }
 .pill { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; padding: 6px 12px; font-size: 13px; }
-.pill-ok { background: var(--night-2); color: #cfe6dc; }
+.pill-ok { background: var(--night-2); color: #cfe3f3; }
 .pill-bad { background: var(--warn-bg); color: var(--warn-ink); font-weight: 600; }
 .pill-warn { background: #f3d27a; color: #3d2c00; font-weight: 600; }
 .pill .led { width: 8px; height: 8px; border-radius: 50%; background: #4fbf98; }
@@ -173,7 +176,7 @@ h2 { margin: 0; font-size: 18px; }
 .layer { position: fixed; inset: 0; z-index: 5; background: var(--ground); overflow: auto; }
 
 /* Dialogs */
-.overlay { position: fixed; inset: 0; background: rgba(19, 35, 29, 0.55); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+.overlay { position: fixed; inset: 0; background: rgba(11, 34, 54, 0.55); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
 .dialog { background: #fff; border-radius: 14px; padding: 22px; width: 100%; max-width: 460px; max-height: calc(100vh - 32px); overflow: auto; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25); }
 .dialog.receipt-dialog { max-width: 820px; flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
 .receipt-dialog .actions { flex: 1 1 260px; display: flex; flex-direction: column; gap: 12px; }
@@ -205,7 +208,7 @@ h2 { margin: 0; font-size: 18px; }
 .bo-nav .who { display: flex; align-items: center; gap: 10px; padding: 0 6px; }
 .bo-nav .who .brand-mark { width: 34px; height: 34px; border-radius: 8px; }
 .bo-links { display: flex; flex-direction: column; gap: 2px; }
-.bo-link { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 8px; border: 0; background: transparent; color: #dce6e1; font-size: 15px; text-align: start; width: 100%; }
+.bo-link { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 8px; border: 0; background: transparent; color: #dbe7f2; font-size: 15px; text-align: start; width: 100%; }
 .bo-link:hover { background: var(--night-2); }
 .bo-link[aria-current='page'] { background: var(--brand); color: #fff; font-weight: 600; }
 .bo-nav .foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; padding: 0 6px; }
@@ -244,16 +247,16 @@ h2 { margin: 0; font-size: 18px; }
 .tag { font-size: 12px; font-weight: 700; border-radius: 6px; padding: 3px 8px; white-space: nowrap; }
 .tag-bad { color: var(--bad); background: var(--bad-bg); }
 .tag-warn { color: var(--warn-ink); background: var(--warn-bg); }
-.tag-ok { color: var(--brand-dark); background: var(--brand-soft); }
+.tag-ok { color: var(--ok-ink); background: var(--ok-bg); }
 .tag-mute { color: var(--ink-2); background: var(--soft-2); }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
 .input.sm, .select.sm { height: 40px; font-size: 15px; }
 .input.invalid { border-color: var(--bad); box-shadow: 0 0 0 1px var(--bad); }
 .check { display: flex; align-items: center; gap: 10px; min-height: 36px; font-size: 15px; }
 .check input { width: 18px; height: 18px; }
-.bars { height: 200px; display: flex; align-items: flex-end; gap: 3px; border-bottom: 1px solid #9aa59f; background-image: linear-gradient(var(--line-2) 1px, transparent 1px); background-size: 100% 25%; direction: ltr; }
+.bars { height: 200px; display: flex; align-items: flex-end; gap: 3px; border-bottom: 1px solid #9aa8b8; background-image: linear-gradient(var(--line-2) 1px, transparent 1px); background-size: 100% 25%; direction: ltr; }
 .bars .bar { flex: 1; height: 100%; display: flex; align-items: flex-end; justify-content: center; }
-.bars .bar span { width: 100%; max-width: 28px; background: #7cb8a5; border-radius: 4px 4px 0 0; }
+.bars .bar span { width: 100%; max-width: 28px; background: #8fd3f0; border-radius: 4px 4px 0 0; }
 .bars .bar.today span { background: var(--brand); }
 .bar-days { display: flex; gap: 3px; font-family: var(--mono); font-size: 11px; color: var(--muted); direction: ltr; }
 .bar-days span { flex: 1; text-align: center; }

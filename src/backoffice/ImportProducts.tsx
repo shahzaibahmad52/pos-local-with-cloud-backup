@@ -27,7 +27,7 @@ export function ImportProducts({ go }: { go: (p: Page) => void }) {
 
   const downloadTemplate = async () => {
     const { default: writeXlsxFile } = await import('write-excel-file/browser');
-    const header = COLUMNS.map((c) => ({ value: c.title, fontWeight: 'bold' as const, backgroundColor: '#E3F1EC' }));
+    const header = COLUMNS.map((c) => ({ value: c.title, fontWeight: 'bold' as const, backgroundColor: '#E3F2FB' }));
     await writeXlsxFile([header, ...EXAMPLES], {
       columns: COLUMNS.map((c) => ({ width: c.width })),
       stickyRowsCount: 1,
