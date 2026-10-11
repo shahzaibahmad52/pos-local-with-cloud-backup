@@ -145,7 +145,7 @@ fn stock_row(r: &rusqlite::Row, warn_until: &str) -> rusqlite::Result<InventoryR
     })
 }
 
-fn all_rows(conn: &Connection) -> AppResult<Vec<InventoryRow>> {
+pub fn all_rows(conn: &Connection) -> AppResult<Vec<InventoryRow>> {
     let warn_until = month_after(EXPIRY_WARN_MONTHS - 1);
     let mut stmt = conn.prepare(&format!("{STOCK_SQL} ORDER BY p.name COLLATE NOCASE"))?;
     let rows =
@@ -153,7 +153,7 @@ fn all_rows(conn: &Connection) -> AppResult<Vec<InventoryRow>> {
     Ok(rows)
 }
 
-fn unit_prices(conn: &Connection, product_id: &str) -> AppResult<Vec<UnitPrice>> {
+pub fn unit_prices(conn: &Connection, product_id: &str) -> AppResult<Vec<UnitPrice>> {
     Ok(products::product_view(conn, product_id)?
         .map(|p| {
             p.units

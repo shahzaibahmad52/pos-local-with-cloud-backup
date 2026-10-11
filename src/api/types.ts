@@ -635,3 +635,28 @@ export interface StoreFigures {
   lastSyncAt: string | null;
   error: string | null;
 }
+
+// ---- Reports ----
+
+export interface ReportColumn {
+  key: string;
+  kind: 'text' | 'money' | 'int' | 'pct' | 'date' | 'month' | 'datetime';
+}
+
+export interface ReportLine {
+  key: string;
+  label: string | null;
+  amount: number;
+  style: 'heading' | 'line' | 'item' | 'less' | 'sub' | 'total';
+  pct: number | null;
+}
+
+export interface Report {
+  name: string;
+  from: string;
+  to: string;
+  columns: ReportColumn[];
+  rows: Record<string, string | number | null>[];
+  totals: Record<string, number> | null;
+  lines: ReportLine[];
+}

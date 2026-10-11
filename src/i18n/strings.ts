@@ -2,9 +2,11 @@
 // saved with their login. Product names stay as printed on the pack.
 
 import { boEn, boUr } from './backoffice';
+import { repEn, repUr } from './reports';
 
 const en = {
   ...boEn,
+  ...repEn,
   appName: 'Medical Store POS',
   loading: 'Loading…',
   retry: 'Try again',
@@ -243,6 +245,7 @@ export type StringKey = keyof typeof en;
 
 const ur: Record<StringKey, string> = {
   ...boUr,
+  ...repUr,
   appName: 'میڈیکل اسٹور POS',
   loading: 'لوڈ ہو رہا ہے…',
   retry: 'دوبارہ کوشش کریں',

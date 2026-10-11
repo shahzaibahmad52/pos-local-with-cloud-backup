@@ -14,10 +14,12 @@ import { ImportProducts } from './ImportProducts';
 import { Inventory } from './Inventory';
 import { ProductForm } from './ProductForm';
 import { Purchases } from './Purchases';
+import { Reports } from './Reports';
 import { Settings } from './Settings';
 
 export type Page =
   | { name: 'dashboard' }
+  | { name: 'reports' }
   | { name: 'inventory'; tab?: InventoryTab; selected?: string }
   | { name: 'product'; productId: string | null }
   | { name: 'import' }
@@ -35,6 +37,11 @@ const ICONS: Record<string, ReactNode> = {
       <rect x="14" y="3" width="7" height="7" rx="1" />
       <rect x="3" y="14" width="7" height="7" rx="1" />
       <rect x="14" y="14" width="7" height="7" rx="1" />
+    </>
+  ),
+  reports: (
+    <>
+      <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
     </>
   ),
   inventory: (
@@ -83,6 +90,7 @@ const ICONS: Record<string, ReactNode> = {
 
 const NAV: [Page['name'], StringKey][] = [
   ['dashboard', 'navDashboard'],
+  ['reports', 'navReports'],
   ['inventory', 'navInventory'],
   ['purchases', 'navPurchases'],
   ['expenses', 'navExpenses'],
@@ -149,6 +157,9 @@ export function Backoffice({
   switch (page.name) {
     case 'dashboard':
       content = <Dashboard store={store} go={go} />;
+      break;
+    case 'reports':
+      content = <Reports store={store} go={go} />;
       break;
     case 'inventory':
       content = <Inventory store={store} go={go} initialTab={page.tab} initialSelected={page.selected} />;

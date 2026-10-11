@@ -20,6 +20,7 @@ pub mod ledger;
 pub mod pricing;
 pub mod products;
 pub mod purchases;
+pub mod reports;
 pub mod returns;
 pub mod rules;
 pub mod sales;

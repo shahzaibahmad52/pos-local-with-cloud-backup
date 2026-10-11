@@ -275,3 +275,24 @@ h2 { margin: 0; font-size: 18px; }
 @media print {
   .bo { display: none; }
 }
+
+/* Reports */
+.statement { display: flex; flex-direction: column; max-width: 640px; }
+.st-line { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line-2); font-size: 15px; }
+.st-line .num { font-family: var(--mono); white-space: nowrap; }
+.st-sub { font-weight: 700; border-bottom: 1px solid var(--ink); }
+.st-total { font-weight: 700; font-size: 18px; border-top: 2px solid var(--ink); border-bottom: 3px double var(--ink); margin-top: 4px; }
+.st-item { padding-inline-start: 18px; }
+.st-heading { font-weight: 700; padding: 12px 0 4px; color: var(--ink-2); }
+.report-table .pname-cell { direction: ltr; unicode-bidi: isolate; text-align: start; }
+.report-print { display: none; }
+@media print {
+  .report-print { display: block; font-family: var(--font); color: #000; font-size: 11px; }
+  .report-print tfoot { display: table-row-group; }
+  .report-print h1 { font-size: 16px; margin: 0; }
+  .report-print h2 { font-size: 14px; margin: 4px 0 0; }
+  .report-print p { margin: 2px 0 10px; }
+  .report-print .foot { margin-top: 10px; color: #555; }
+  .report-print .tbl th, .report-print .tbl td { padding: 4px 6px; font-size: 10.5px; background: none; }
+  .report-print .statement { max-width: none; }
+}

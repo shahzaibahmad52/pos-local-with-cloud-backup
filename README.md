@@ -6,6 +6,34 @@ UI design (all screens): https://claude.ai/artifact/DdLH1Rp4aDxSGTM2m2EKUz
 
 ## What works now
 
+### Milestone 5: financial reports
+
+Backoffice › **Financial reports**: 19 reports for today, yesterday, the last 7 days, this month, last month or any dates. Each one can be printed on A4 (or saved as PDF from the print dialog) and exported to Excel, in English or Urdu.
+
+- **Profit:**
+  - **Profit & loss:** gross sales, discounts, returns, sales tax, cost of goods (from the batches actually sold), gross profit and margin. Then expenses by category, stock written off (damaged / expired / lost), and net profit.
+  - **Gross profit by product** and **discounts given** (with who approved them).
+- **Sales:**
+  - Daily summary with cash / card / wallets / khata.
+  - By product, by category, by cashier (including cash short/over from shift counts), and by payment method.
+  - Returns & refunds.
+- **Cash:** every shift close (Z-report) and a cash book of everything that went in or out of the drawers.
+- **Stock:**
+  - Valuation at cost and at sale price.
+  - Movement (opening, received, sold, returned, corrected, closing).
+  - Expiry within 1/3/6/12 months.
+  - Dead / slow stock with no sale in 30–180 days.
+- **Purchases:** purchase register and supplier payables.
+- **Customers:** khata receivables with ageing (0–30, 31–60, 61–90, 90+ days).
+- **Tax:** sales tax summary by rate, net of refunds.
+- **Branch comparison:** links to the All stores page.
+
+The reports are tested to agree with each other and with the dashboard:
+- Daily sales and sales by cashier add up to net sales.
+- Product profit adds up to the P&L gross profit.
+- The cash book adds up to the drawer's expected cash.
+- Stock valuation equals the inventory value.
+
 ### Milestone 4: cloud backup
 
 - **Cloud backup to Turso (free plan), one database per store:**
@@ -189,6 +217,7 @@ The drawer must be cabled to the printer (RJ11 "DK" port); the app sends the sta
 ```
 crates/pos-server/   Store server: database, migrations, sale/return/shift rules, HTTP API (Rust, axum, rusqlite)
   src/cloud/         Turso client, cloud sync and restore, daily backup files, head-office view
+  src/reports.rs     All financial and stock reports
   migrations/        SQL schema
   tests/             End-to-end sale, return, shift and API tests
 crates/pos-printer/  ESC/POS image printing, paper cut, cash drawer; raw printing to Windows printers
@@ -227,7 +256,7 @@ CI runs all of these on every push.
 4. **Cloud** — done:
    - Turso backup (one database per store), restore on a new PC, daily backup files.
    - Head-office view of all stores.
-5. **Reports:** P&L, sales by product / category / cashier / payment, stock valuation, expiry, khata aging, and the sales tax summary.
+5. **Reports** — done: P&L, product profit, sales by product / category / cashier / payment, cash book, stock valuation and movement, expiry, slow stock, purchases, payables, khata ageing, sales tax.
 6. **Extras:**
    - Stock count and branch transfers.
    - Optional FBR POS integration (off by default, per store).

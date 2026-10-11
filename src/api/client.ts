@@ -1,6 +1,7 @@
 import type {
   ActivityEntry,
   CloudPage,
+  Report,
   StoreFigures,
   AdjustReason,
   Dashboard,
@@ -222,5 +223,7 @@ export const api = {
   restore: (url: string, token: string) => request<{ ok: boolean; storeName: string }>('POST', '/api/restore', { url, token }),
   hq: (from: string, to: string) => request<StoreFigures[]>('GET', `/api/hq?${q({ from, to })}`),
   addHqStore: (input: { url: string; token: string; name?: string }) => request<{ ok: boolean }>('POST', '/api/hq/stores', input),
+  report: (name: string, from: string, to: string, n?: number) =>
+    request<Report>('GET', `/api/reports/${id(name)}?${q({ from, to, n })}`),
   removeHqStore: (storeId: string) => request<{ ok: boolean }>('DELETE', `/api/hq/stores/${id(storeId)}`),
 };

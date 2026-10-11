@@ -23,7 +23,7 @@ use crate::{
     cloud::{backup, hq, sync, sync::Cloud},
     dashboard,
     error::{AppError, AppResult},
-    expenses, import, inventory, khata, products, purchases, returns, rules, sales, settings, shifts, store,
+    expenses, import, inventory, khata, products, purchases, reports, returns, rules, sales, settings, shifts, store,
 };
 
 #[derive(Clone)]
@@ -790,6 +790,16 @@ async fn hq_remove(State(s): State<AppState>, _admin: AdminUser, Path(id): Path<
     Ok(Json(json!({ "ok": true })))
 }
 
+async fn report(
+    State(s): State<AppState>,
+    _admin: AdminUser,
+    Path(name): Path<String>,
+    Query(q): Query<reports::Params>,
+) -> AppResult<Json<reports::Report>> {
+    let conn = s.db()?;
+    Ok(Json(reports::run(&conn, &name, &q)?))
+}
+
 /// Origins allowed to call the API from a browser: the desktop app's own
 /// webview and the local development server. Tills on other PCs use the
 /// same desktop app, so their origin is the app's too.
@@ -853,6 +863,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/backups", post(backup_now))
         .route("/api/restore", post(restore))
         .route("/api/hq", get(hq_overview))
+        .route("/api/reports/{name}", get(report))
         .route("/api/hq/stores", post(hq_add))
         .route("/api/hq/stores/{id}", delete(hq_remove))
         .route("/api/shifts/current", get(current_shift))

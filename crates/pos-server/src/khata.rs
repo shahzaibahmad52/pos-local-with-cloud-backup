@@ -53,7 +53,7 @@ pub struct AccountList {
     pub accounts: Vec<Account>,
 }
 
-fn entries(conn: &Connection, customer_id: &str) -> AppResult<Vec<Entry>> {
+pub fn entries(conn: &Connection, customer_id: &str) -> AppResult<Vec<Entry>> {
     let mut stmt = conn.prepare(
         "SELECT amount, substr(created_at, 1, 10) FROM khata_entries WHERE customer_id = ?1
          ORDER BY created_at, rowid",
