@@ -1,11 +1,11 @@
 import type { Language } from '../api/types';
+import bizflowMark from '../assets/bizflow-mark.svg';
 
+/** The Bizflow mark on a white tile. */
 export function BrandMark({ size = 24 }: { size?: number }) {
   return (
     <div className="brand-mark" aria-hidden="true">
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.3" strokeLinecap="round">
-        <path d="M12 5v14M5 12h14" />
-      </svg>
+      <img src={bizflowMark} width={Math.round(size * 1.35)} height={Math.round(size * 1.35)} alt="" />
     </div>
   );
 }
