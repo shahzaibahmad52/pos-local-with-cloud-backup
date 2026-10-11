@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { api } from '../api/client';
-import type { InventoryTab, Language, StoreHeader, User } from '../api/types';
+import type { CloudPage, InventoryTab, Language, StoreHeader, User } from '../api/types';
 import { BrandMark, LanguageToggle } from '../components/common';
 import { useI18n } from '../i18n/i18n';
 import type { StringKey } from '../i18n/strings';
@@ -9,6 +9,7 @@ import { Activity } from '../screens/Activity';
 import { Customers } from './Customers';
 import { Dashboard } from './Dashboard';
 import { Expenses } from './Expenses';
+import { HeadOffice } from './HeadOffice';
 import { ImportProducts } from './ImportProducts';
 import { Inventory } from './Inventory';
 import { ProductForm } from './ProductForm';
@@ -24,6 +25,7 @@ export type Page =
   | { name: 'expenses' }
   | { name: 'khata' }
   | { name: 'activity' }
+  | { name: 'stores' }
   | { name: 'settings' };
 
 const ICONS: Record<string, ReactNode> = {
@@ -66,6 +68,11 @@ const ICONS: Record<string, ReactNode> = {
       <path d="m9 12 2 2 4-4" />
     </>
   ),
+  stores: (
+    <>
+      <path d="M3 9 5 4h14l2 5M3 9h18v11H3zM9 20v-6h6v6" />
+    </>
+  ),
   settings: (
     <>
       <circle cx="12" cy="12" r="3" />
@@ -81,6 +88,7 @@ const NAV: [Page['name'], StringKey][] = [
   ['expenses', 'navExpenses'],
   ['khata', 'navKhata'],
   ['activity', 'navActivity'],
+  ['stores', 'navStores'],
   ['settings', 'navSettings'],
 ];
 
@@ -109,6 +117,19 @@ export function Backoffice({
 }) {
   const { t, lang, setLang } = useI18n();
   const [page, setPage] = useState<Page>({ name: 'dashboard' });
+  const [cloud, setCloud] = useState<CloudPage | null>(null);
+
+  // Cloud backup status for the menu, refreshed every minute.
+  useEffect(() => {
+    const load = () =>
+      api
+        .cloud()
+        .then(setCloud)
+        .catch(() => undefined);
+    void load();
+    const timer = setInterval(load, 60_000);
+    return () => clearInterval(timer);
+  }, [page.name]);
 
   const changeLang = (l: Language) => {
     setLang(l);
@@ -147,8 +168,11 @@ export function Backoffice({
     case 'khata':
       content = <Customers store={store} printer={printer} tillCode={tillCode} />;
       break;
+    case 'stores':
+      content = <HeadOffice />;
+      break;
     case 'settings':
-      content = <Settings user={user} printer={printer} onStoreChange={onStoreChange} />;
+      content = <Settings user={user} printer={printer} onStoreChange={onStoreChange} onCloudChange={setCloud} />;
       break;
   }
 
@@ -181,6 +205,7 @@ export function Backoffice({
           ))}
         </div>
         <div className="foot">
+          <SyncStatus cloud={cloud} onClick={() => go({ name: 'settings' })} />
           <button type="button" className="btn btn-primary" onClick={onOpenTill}>
             {t('openTill')}
           </button>
@@ -192,5 +217,36 @@ export function Backoffice({
       </nav>
       <main className="bo-main">{content}</main>
     </div>
+  );
+}
+
+function SyncStatus({ cloud, onClick }: { cloud: CloudPage | null; onClick: () => void }) {
+  const { t } = useI18n();
+  if (!cloud) return null;
+  let text: string;
+  let colour = '#4fbf98';
+  if (!cloud.enabled) {
+    text = t('syncOff');
+    colour = '#a9bdb4';
+  } else if (cloud.lastError && cloud.pending > 0) {
+    text = t('syncWaiting', { n: cloud.pending });
+    colour = '#f0a640';
+  } else if (!cloud.lastSyncAt) {
+    text = t('syncNever');
+    colour = '#f0a640';
+  } else {
+    const d = new Date(cloud.lastSyncAt);
+    const p = (n: number) => String(n).padStart(2, '0');
+    text = t('syncOk', { time: `\u2066${p(d.getHours())}:${p(d.getMinutes())}\u2069` });
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#cfe6dc', background: 'none', border: 0, padding: 0, textAlign: 'start' }}
+    >
+      <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: colour, flex: 'none' }} />
+      {text}
+    </button>
   );
 }

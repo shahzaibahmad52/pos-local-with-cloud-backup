@@ -124,6 +124,7 @@ export function App() {
     case 'store-setup':
       return (
         <StoreSetup
+          onRestored={() => void connect()}
           onDone={async (user) => {
             const health = await api.health();
             if (health.store) await afterSignIn(health.store, user);

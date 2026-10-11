@@ -3,6 +3,7 @@
 
 use std::{
     net::SocketAddr,
+    path::PathBuf,
     sync::{Arc, Mutex, MutexGuard},
 };
 
@@ -19,6 +20,7 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::{
     auth::{self, Auth, User},
+    cloud::{backup, hq, sync, sync::Cloud},
     dashboard,
     error::{AppError, AppResult},
     expenses, import, inventory, khata, products, purchases, returns, rules, sales, settings, shifts, store,
@@ -28,11 +30,37 @@ use crate::{
 pub struct AppState {
     db: Arc<Mutex<Connection>>,
     auth: Arc<Auth>,
+    cloud: Arc<Cloud>,
+    /// Where the daily backup files go; `None` for an in-memory database.
+    backup_dir: Option<PathBuf>,
 }
 
 impl AppState {
     pub fn new(conn: Connection) -> Self {
-        Self { db: Arc::new(Mutex::new(conn)), auth: Arc::new(Auth::default()) }
+        Self {
+            db: Arc::new(Mutex::new(conn)),
+            auth: Arc::new(Auth::default()),
+            cloud: Arc::default(),
+            backup_dir: None,
+        }
+    }
+
+    pub fn with_backup_dir(mut self, dir: PathBuf) -> Self {
+        self.backup_dir = Some(dir);
+        self
+    }
+
+    /// The shared database, for the background sync worker.
+    pub fn database(&self) -> Arc<Mutex<Connection>> {
+        self.db.clone()
+    }
+
+    pub fn cloud(&self) -> Arc<Cloud> {
+        self.cloud.clone()
+    }
+
+    pub fn backup_dir(&self) -> Option<PathBuf> {
+        self.backup_dir.clone()
     }
 
     fn db(&self) -> AppResult<MutexGuard<'_, Connection>> {
@@ -676,6 +704,92 @@ async fn recover(
     Ok(Json(json!({ "token": token, "user": user })))
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CloudPage {
+    #[serde(flatten)]
+    cloud: sync::CloudView,
+    backups: Vec<backup::BackupFile>,
+    backup_dir: Option<String>,
+}
+
+fn cloud_page(s: &AppState) -> AppResult<CloudPage> {
+    let conn = s.db()?;
+    Ok(CloudPage {
+        cloud: sync::view(&conn, &s.cloud)?,
+        backups: s.backup_dir.as_deref().map(backup::list).unwrap_or_default(),
+        backup_dir: s.backup_dir.as_ref().map(|d| d.display().to_string()),
+    })
+}
+
+async fn get_cloud(State(s): State<AppState>, _admin: AdminUser) -> AppResult<Json<CloudPage>> {
+    Ok(Json(cloud_page(&s)?))
+}
+
+#[derive(Deserialize)]
+struct CloudInput {
+    url: String,
+    token: String,
+}
+
+async fn enable_cloud(
+    State(s): State<AppState>,
+    _admin: AdminUser,
+    Json(input): Json<CloudInput>,
+) -> AppResult<Json<CloudPage>> {
+    sync::enable(&s.db, &s.cloud, &input.url, &input.token).await?;
+    Ok(Json(cloud_page(&s)?))
+}
+
+async fn disable_cloud(State(s): State<AppState>, _admin: AdminUser) -> AppResult<Json<CloudPage>> {
+    sync::disable(&*s.db()?)?;
+    Ok(Json(cloud_page(&s)?))
+}
+
+async fn sync_now(State(s): State<AppState>, _admin: AdminUser) -> AppResult<Json<CloudPage>> {
+    // The result is in the status either way; a failure here is shown, not thrown.
+    let _ = sync::sync_once(&s.db, &s.cloud).await;
+    Ok(Json(cloud_page(&s)?))
+}
+
+async fn backup_now(State(s): State<AppState>, _admin: AdminUser) -> AppResult<Json<CloudPage>> {
+    let dir = s.backup_dir.clone().ok_or_else(|| AppError::Conflict("This server has no backup folder.".into()))?;
+    backup::backup_now(&*s.db()?, &dir)?;
+    Ok(Json(cloud_page(&s)?))
+}
+
+/// Rebuilds a new main PC from the cloud. Only on the PC itself.
+async fn restore(
+    State(s): State<AppState>,
+    _local: LocalOnly,
+    Json(input): Json<CloudInput>,
+) -> AppResult<Json<Value>> {
+    let name = sync::restore(&s.db, &s.cloud, &input.url, &input.token).await?;
+    Ok(Json(json!({ "ok": true, "storeName": name })))
+}
+
+async fn hq_overview(
+    State(s): State<AppState>,
+    _admin: AdminUser,
+    Query(q): Query<dashboard::Period>,
+) -> AppResult<Json<Vec<hq::StoreFigures>>> {
+    Ok(Json(hq::overview(&s.db, &s.cloud, &q.from, &q.to).await?))
+}
+
+async fn hq_add(
+    State(s): State<AppState>,
+    _admin: AdminUser,
+    Json(input): Json<hq::AddStore>,
+) -> AppResult<Json<Value>> {
+    hq::add(&s.db, &s.cloud, &input).await?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+async fn hq_remove(State(s): State<AppState>, _admin: AdminUser, Path(id): Path<String>) -> AppResult<Json<Value>> {
+    hq::remove(&*s.db()?, &id)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
 /// Origins allowed to call the API from a browser: the desktop app's own
 /// webview and the local development server. Tills on other PCs use the
 /// same desktop app, so their origin is the app's too.
@@ -734,6 +848,13 @@ pub fn router(state: AppState) -> Router {
         .route("/api/khata/{id}/opening", post(khata_opening))
         .route("/api/customers/{id}", put(update_customer))
         .route("/api/tills/open", get(open_tills))
+        .route("/api/cloud", get(get_cloud).put(enable_cloud).delete(disable_cloud))
+        .route("/api/cloud/sync", post(sync_now))
+        .route("/api/backups", post(backup_now))
+        .route("/api/restore", post(restore))
+        .route("/api/hq", get(hq_overview))
+        .route("/api/hq/stores", post(hq_add))
+        .route("/api/hq/stores/{id}", delete(hq_remove))
         .route("/api/shifts/current", get(current_shift))
         .route("/api/shifts/open", post(open_shift))
         .route("/api/sales", post(create_sale))

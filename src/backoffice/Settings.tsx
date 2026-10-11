@@ -1,21 +1,24 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
-import type { Language, ReceiptLanguage, StoreHeader, StoreSettings, User, UserRow } from '../api/types';
+import type { CloudPage, Language, ReceiptLanguage, StoreHeader, StoreSettings, User, UserRow } from '../api/types';
 import { describeError } from '../i18n/errors';
 import { useI18n } from '../i18n/i18n';
 import { PrintPortal } from '../print/DocView';
 import { recoveryCodeDoc, type Doc } from '../print/doc';
 import { printDoc, type PrinterSettings } from '../print/printer';
+import { CloudBackup } from './Cloud';
 import { Modal } from './parts';
 
 export function Settings({
   user,
   printer,
   onStoreChange,
+  onCloudChange,
 }: {
   user: User;
   printer: PrinterSettings;
   onStoreChange: (s: StoreHeader) => void;
+  onCloudChange?: (page: CloudPage) => void;
 }) {
   const { t, lang } = useI18n();
   const [settings, setSettings] = useState<StoreSettings | null>(null);
@@ -162,10 +165,7 @@ export function Settings({
               {t('recoveryNew')}
             </button>
           </section>
-          <section className="card">
-            <h2>{t('cloudTitle')}</h2>
-            <span className="small">{t('cloudLater')}</span>
-          </section>
+          <CloudBackup onChange={onCloudChange} />
         </div>
       </div>
 

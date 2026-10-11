@@ -1,5 +1,7 @@
 import type {
   ActivityEntry,
+  CloudPage,
+  StoreFigures,
   AdjustReason,
   Dashboard,
   Expense,
@@ -210,4 +212,15 @@ export const api = {
   updateUser: (userId: string, input: { name: string; canApprove: boolean; language: Language; active: boolean; secret?: string }) =>
     request<UserRow>('PUT', `/api/users/${id(userId)}`, input),
   newRecoveryCode: () => request<{ code: string }>('POST', '/api/recovery-code'),
+
+  // Cloud backup and head office
+  cloud: () => request<CloudPage>('GET', '/api/cloud'),
+  enableCloud: (url: string, token: string) => request<CloudPage>('PUT', '/api/cloud', { url, token }),
+  disableCloud: () => request<CloudPage>('DELETE', '/api/cloud'),
+  syncNow: () => request<CloudPage>('POST', '/api/cloud/sync'),
+  backupNow: () => request<CloudPage>('POST', '/api/backups'),
+  restore: (url: string, token: string) => request<{ ok: boolean; storeName: string }>('POST', '/api/restore', { url, token }),
+  hq: (from: string, to: string) => request<StoreFigures[]>('GET', `/api/hq?${q({ from, to })}`),
+  addHqStore: (input: { url: string; token: string; name?: string }) => request<{ ok: boolean }>('POST', '/api/hq/stores', input),
+  removeHqStore: (storeId: string) => request<{ ok: boolean }>('DELETE', `/api/hq/stores/${id(storeId)}`),
 };

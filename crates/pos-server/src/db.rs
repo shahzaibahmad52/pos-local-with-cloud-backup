@@ -8,7 +8,18 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/001_init.sql"),
     include_str!("../migrations/002_returns_shifts.sql"),
     include_str!("../migrations/003_backoffice.sql"),
+    include_str!("../migrations/004_cloud_sync.sql"),
 ];
+
+/// How many migrations this version of the app has (the schema version).
+pub fn schema_version() -> i64 {
+    MIGRATIONS.len() as i64
+}
+
+/// The SQL of each migration, for setting up the same schema in the cloud.
+pub fn migrations() -> &'static [&'static str] {
+    MIGRATIONS
+}
 
 pub fn open(path: &Path) -> rusqlite::Result<Connection> {
     let conn = Connection::open(path)?;
@@ -19,6 +30,7 @@ pub fn open(path: &Path) -> rusqlite::Result<Connection> {
          PRAGMA busy_timeout = 5000;",
     )?;
     migrate(&conn)?;
+    crate::cloud::sync::ensure_tracking(&conn)?;
     Ok(conn)
 }
 
@@ -26,6 +38,7 @@ pub fn open_in_memory() -> rusqlite::Result<Connection> {
     let conn = Connection::open_in_memory()?;
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;
     migrate(&conn)?;
+    crate::cloud::sync::ensure_tracking(&conn)?;
     Ok(conn)
 }
 

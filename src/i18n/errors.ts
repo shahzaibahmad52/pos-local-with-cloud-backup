@@ -48,6 +48,14 @@ const UR: Record<string, (p: Params) => string> = {
   'supplier.overpay': (p) => `یہ ${s(p.name)} کے بقایا ${formatRs(n(p.balance))} سے زیادہ ہے۔`,
   'khata.overpay': (p) => `${s(p.name)} کے ذمے صرف ${formatRs(n(p.balance))} ہیں۔`,
   'expense.locked': () => 'یہ خرچ بند شفٹ کی دراز سے ادا ہوا تھا، اس لیے حذف نہیں ہو سکتا۔',
+  'cloud.offline': () => 'کلاؤڈ سے رابطہ نہیں ہو رہا۔ انٹرنیٹ دیکھیں۔',
+  'cloud.auth': () => 'کلاؤڈ نے ٹوکن قبول نہیں کیا۔ Turso سے نیا ٹوکن بنائیں۔',
+  'cloud.error': () => 'کلاؤڈ ڈیٹا بیس میں خرابی۔ دوبارہ کوشش کریں۔',
+  'cloud.bad_url': () => 'Turso سے ڈیٹا بیس URL لگائیں، جیسے libsql://store-b1-name.turso.io',
+  'cloud.other_store': (p) => `اس کلاؤڈ ڈیٹا بیس میں اسٹور ${s(p.store)} کا بیک اپ ہے۔ ہر اسٹور کا اپنا ڈیٹا بیس چاہیے۔`,
+  'cloud.newer': () => 'یہ بیک اپ ایپ کے نئے ورژن سے بنا ہے۔ پہلے اس PC کی ایپ اپ ڈیٹ کریں۔',
+  'cloud.empty': () => 'اس کلاؤڈ ڈیٹا بیس میں کسی اسٹور کا بیک اپ نہیں۔',
+  'hq.duplicate': (p) => `اسٹور ${s(p.store)} پہلے سے فہرست میں ہے۔`,
   'barcode.taken': (p) => `بارکوڈ ${s(p.code)} پہلے سے ${s(p.product)} پر ہے۔`,
 };
 

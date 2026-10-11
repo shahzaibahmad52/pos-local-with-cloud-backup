@@ -2,14 +2,33 @@ import { useState, type FormEvent } from 'react';
 import { api, ApiError, setToken } from '../api/client';
 import type { User } from '../api/types';
 import { BrandMark, LanguageToggle } from '../components/common';
+import { describeError } from '../i18n/errors';
 import { useI18n } from '../i18n/i18n';
 
 /** Shown once, when the main PC's database is empty. */
-export function StoreSetup({ onDone }: { onDone: (user: User) => void }) {
+export function StoreSetup({ onDone, onRestored }: { onDone: (user: User) => void; onRestored: () => void }) {
   const { t, lang, setLang } = useI18n();
   const [form, setForm] = useState({ storeCode: 'B1', storeName: '', address: '', phone: '', ownerName: '', password: '', password2: '' });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [cloudUrl, setCloudUrl] = useState('');
+  const [cloudToken, setCloudToken] = useState('');
+  const [done, setDone] = useState<string | null>(null);
+
+  const restore = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await api.restore(cloudUrl, cloudToken);
+      setDone(t('restoreDone', { name: res.storeName }));
+    } catch (err) {
+      setError(describeError(err, lang));
+    } finally {
+      setBusy(false);
+    }
+  };
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
 
   const submit = async (e: FormEvent) => {
@@ -44,6 +63,34 @@ export function StoreSetup({ onDone }: { onDone: (user: User) => void }) {
         <p className="side-muted">{t('setupIntro')}</p>
       </aside>
       <main className="split-main">
+        {restoring ? (
+          <form className="panel" onSubmit={(e) => void restore(e)}>
+            <div className="row" style={{ flexWrap: 'wrap' }}>
+              <h1>{t('restoreTitle')}</h1>
+              <LanguageToggle value={lang} onChange={setLang} />
+            </div>
+            <p className="muted" style={{ margin: 0 }}>{t('restoreHelp')}</p>
+            <div className="field">
+              <label className="label" htmlFor="rs-url">{t('cloudUrl')}</label>
+              <input id="rs-url" className="input ltr" placeholder="libsql://store-b1-yourname.turso.io" value={cloudUrl} onChange={(e) => setCloudUrl(e.target.value)} required />
+            </div>
+            <div className="field">
+              <label className="label" htmlFor="rs-token">{t('cloudToken')}</label>
+              <input id="rs-token" className="input ltr" type="password" autoComplete="off" value={cloudToken} onChange={(e) => setCloudToken(e.target.value)} required />
+            </div>
+            {busy && <div className="alert alert-warn">{t('restoring')}</div>}
+            {error && <div className="alert alert-bad" role="alert">{error}</div>}
+            {done ? (
+              <>
+                <div className="alert alert-ok" role="status">{done}</div>
+                <button type="button" className="btn btn-primary btn-lg" onClick={onRestored}>{t('signIn')}</button>
+              </>
+            ) : (
+              <button type="submit" className="btn btn-primary btn-lg" disabled={busy}>{t('restoreBtn')}</button>
+            )}
+            {!done && <button type="button" className="btn" onClick={() => { setRestoring(false); setError(null); }}>{t('newStoreInstead')}</button>}
+          </form>
+        ) : (
         <form className="panel wide" onSubmit={submit}>
           <div className="row" style={{ flexWrap: 'wrap' }}>
             <h1>{t('setupTitle')}</h1>
@@ -85,7 +132,9 @@ export function StoreSetup({ onDone }: { onDone: (user: User) => void }) {
           </div>
           {error && <div className="alert alert-bad" role="alert">{error}</div>}
           <button type="submit" className="btn btn-primary btn-lg" disabled={busy}>{t('createStore')}</button>
+          <button type="button" className="btn" onClick={() => { setRestoring(true); setError(null); }}>{t('restoreInstead')}</button>
         </form>
+        )}
       </main>
     </div>
   );

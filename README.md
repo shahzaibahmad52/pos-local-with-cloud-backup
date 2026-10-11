@@ -6,6 +6,18 @@ UI design (all screens): https://claude.ai/artifact/DdLH1Rp4aDxSGTM2m2EKUz
 
 ## What works now
 
+### Milestone 4: cloud backup
+
+- **Cloud backup to Turso (free plan), one database per store:**
+  - Every change on the main PC (sales, stock, khata, expenses, users…) is copied to the store's own cloud database. The cloud copy has the same tables and rows as the shop's.
+  - Sales are always saved on the main PC first. Changes go up every 30 seconds while the internet is on, and simply wait while it is off.
+  - The backoffice menu shows the state, e.g. "Cloud backed up · 14:31" or "Offline · 41 changes waiting". Settings shows the last upload, what is waiting, the last error, and **Sync now**.
+  - The cloud token stays on the main PC; it is never copied to the cloud.
+  - A cloud database already holding another store's backup is refused, so two stores can't overwrite each other.
+- **Restore on a new main PC:** on the first-run screen choose **Restore from cloud backup**, paste the store's URL and token, and the whole store comes back: products, stock, sales, khata, users and their PINs. Backup carries on to the same database.
+- **Daily backup files:** once a day the main PC writes a copy of the database to a `backups` folder next to it, keeping the last 14. **Back up now** makes one at any time.
+- **All stores (head office):** add each other store's cloud database once (URL + a read-only token). The page shows sales, gross profit, expenses, net profit and khata for every store and all stores together, with when each store last synced. The figures use the same sums as the dashboard.
+
 ### Milestone 3: backoffice (owner / admin only)
 
 The owner signs in to the **backoffice**; cashiers go straight to the till. The owner can open the till from the backoffice and come back with the **Backoffice** button in the till header.
@@ -69,7 +81,6 @@ The owner signs in to the **backoffice**; cashiers go straight to the till. The 
   - **Manager PIN:** needed for a discount above 5% and for khata over the customer's limit. Approvals go into an append-only activity log.
   - **Sign-in:** cashiers use a 4-digit PIN and the owner uses a password. A user is locked out for 5 minutes after 5 wrong tries.
   - **Safe retries:** if a till's connection drops while paying, it can resend the sale and it is still only charged once.
-  - **Cloud backup:** every sale and stock change is queued in an `outbox` table for cloud backup. The upload itself comes in milestone 4.
 - **Till UI** (`src/`, React + TypeScript):
   - First-run setup of the computer and of the store.
   - PIN sign-in, where each user's language is remembered.
@@ -82,7 +93,7 @@ The owner signs in to the **backoffice**; cashiers go straight to the till. The 
 - **Desktop app** (`src-tauri`, Tauri 2):
   - On first start you choose whether the PC is the **main PC** (it runs the store server and database) or an **extra till** (it connects to the main PC's address).
 
-Not built yet: stock count, transfers, full reports, cloud sync. See the roadmap below.
+Not built yet: stock count, transfers, full reports. See the roadmap below.
 
 ## How it fits together
 
@@ -149,7 +160,21 @@ To set up a second till in the same shop:
 
 ### Where the data lives
 
-`%APPDATA%\pk.medstore.pos\store.sqlite` on the main PC. Until cloud sync is added, copy that file (with the app closed) to a USB drive to back up.
+`%APPDATA%\pk.medstore.pos\store.sqlite` on the main PC, with daily copies in `%APPDATA%\pk.medstore.pos\backups\`. To bring back a daily copy: close the app, replace `store.sqlite` with the copy (renamed to `store.sqlite`), and start the app.
+
+### Cloud backup (Turso)
+
+1. Make a free account at [turso.tech](https://turso.tech) and install the Turso CLI.
+2. Make one database per store, and a token for it:
+   ```bash
+   turso db create store-b1
+   turso db show store-b1 --url          # libsql://store-b1-yourname.turso.io
+   turso db tokens create store-b1       # the token for that store's main PC
+   ```
+3. On that store's main PC: Backoffice › Store, Users & Settings › Cloud backup. Paste the URL and token, then **Turn on cloud backup**. The first upload sends everything.
+4. For the head-office view, make a read-only token for each store (`turso db tokens create store-b2 --read-only`) and add it on the owner's PC under **All stores › Add a store**.
+
+Keep each store's URL and token written down somewhere safe; they are what a new main PC needs to restore the store.
 
 ### Printing
 
@@ -163,6 +188,7 @@ The drawer must be cabled to the printer (RJ11 "DK" port); the app sends the sta
 
 ```
 crates/pos-server/   Store server: database, migrations, sale/return/shift rules, HTTP API (Rust, axum, rusqlite)
+  src/cloud/         Turso client, cloud sync and restore, daily backup files, head-office view
   migrations/        SQL schema
   tests/             End-to-end sale, return, shift and API tests
 crates/pos-printer/  ESC/POS image printing, paper cut, cash drawer; raw printing to Windows printers
@@ -198,8 +224,8 @@ CI runs all of these on every push.
    - Dashboard, inventory, add/edit product, Excel import, stock corrections.
    - Purchases (GRN) with bonus and freight, supplier payables.
    - Expenses, customers & khata with WhatsApp reminders, users, store settings, recovery code.
-4. **Cloud:**
-   - Turso sync from the outbox (one database per store), with a nightly full backup and restore.
+4. **Cloud** — done:
+   - Turso backup (one database per store), restore on a new PC, daily backup files.
    - Head-office view of all stores.
 5. **Reports:** P&L, sales by product / category / cashier / payment, stock valuation, expiry, khata aging, and the sales tax summary.
 6. **Extras:**

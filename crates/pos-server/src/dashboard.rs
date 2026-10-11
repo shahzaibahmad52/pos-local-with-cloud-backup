@@ -57,51 +57,41 @@ pub struct Dashboard {
     pub expiring: Vec<ExpiringBatch>,
 }
 
-fn one(conn: &Connection, sql: &str, from: &str, to: &str) -> AppResult<i64> {
-    Ok(conn.query_row(sql, params![from, to], |r| r.get::<_, Option<i64>>(0))?.unwrap_or(0))
-}
+/// Every money figure for sales made and expenses paid between `?1` and
+/// `?2` (`YYYY-MM-DD`, inclusive), in one row. The same SQL runs on this PC
+/// and on other stores' cloud copies (head-office view).
+pub const FIGURES_SQL: &str = "
+SELECT
+  (SELECT COALESCE(SUM(total), 0) FROM sales
+    WHERE status = 'completed' AND substr(created_at, 1, 10) BETWEEN ?1 AND ?2),
+  (SELECT COUNT(*) FROM sales
+    WHERE status = 'completed' AND substr(created_at, 1, 10) BETWEEN ?1 AND ?2),
+  (SELECT COALESCE(SUM(tax_included), 0) FROM sales
+    WHERE status = 'completed' AND substr(created_at, 1, 10) BETWEEN ?1 AND ?2),
+  (SELECT COALESCE(SUM(l.cost_total), 0) FROM sale_lines l JOIN sales s ON s.id = l.sale_id
+    WHERE s.status = 'completed' AND substr(s.created_at, 1, 10) BETWEEN ?1 AND ?2),
+  (SELECT COALESCE(SUM(refund_total), 0) FROM returns WHERE substr(created_at, 1, 10) BETWEEN ?1 AND ?2),
+  (SELECT COALESCE(SUM(rl.refund * l.tax_included / l.line_total), 0) FROM return_lines rl
+    JOIN returns r ON r.id = rl.return_id JOIN sale_lines l ON l.id = rl.sale_line_id
+    WHERE substr(r.created_at, 1, 10) BETWEEN ?1 AND ?2 AND l.line_total > 0),
+  (SELECT COALESCE(SUM(l.cost_total * rl.qty / l.qty), 0) FROM return_lines rl
+    JOIN returns r ON r.id = rl.return_id JOIN sale_lines l ON l.id = rl.sale_line_id
+    WHERE substr(r.created_at, 1, 10) BETWEEN ?1 AND ?2 AND rl.condition = 'restock' AND l.qty > 0),
+  (SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE expense_date BETWEEN ?1 AND ?2)";
 
-/// Money figures for sales made and expenses paid between two dates.
-pub fn figures(conn: &Connection, from: &str, to: &str) -> AppResult<Figures> {
-    const SALES_IN: &str = "s.status = 'completed' AND substr(s.created_at, 1, 10) BETWEEN ?1 AND ?2";
-    const RETURNS_IN: &str = "substr(r.created_at, 1, 10) BETWEEN ?1 AND ?2";
-    let sales = one(conn, &format!("SELECT SUM(s.total) FROM sales s WHERE {SALES_IN}"), from, to)?;
-    let bills = one(conn, &format!("SELECT COUNT(*) FROM sales s WHERE {SALES_IN}"), from, to)?;
-    let tax = one(conn, &format!("SELECT SUM(s.tax_included) FROM sales s WHERE {SALES_IN}"), from, to)?;
-    let cost = one(
-        conn,
-        &format!("SELECT SUM(l.cost_total) FROM sale_lines l JOIN sales s ON s.id = l.sale_id WHERE {SALES_IN}"),
-        from,
-        to,
-    )?;
-    let refunds = one(conn, &format!("SELECT SUM(r.refund_total) FROM returns r WHERE {RETURNS_IN}"), from, to)?;
-    // The tax and cost share of each returned line, in proportion to what came back.
-    let tax_refunded = one(
-        conn,
-        &format!(
-            "SELECT SUM(rl.refund * l.tax_included / l.line_total) FROM return_lines rl
-             JOIN returns r ON r.id = rl.return_id JOIN sale_lines l ON l.id = rl.sale_line_id
-             WHERE {RETURNS_IN} AND l.line_total > 0"
-        ),
-        from,
-        to,
-    )?;
-    let cost_restocked = one(
-        conn,
-        &format!(
-            "SELECT SUM(l.cost_total * rl.qty / l.qty) FROM return_lines rl
-             JOIN returns r ON r.id = rl.return_id JOIN sale_lines l ON l.id = rl.sale_line_id
-             WHERE {RETURNS_IN} AND rl.condition = 'restock' AND l.qty > 0"
-        ),
-        from,
-        to,
-    )?;
-    let expenses = one(conn, "SELECT SUM(amount) FROM expenses WHERE expense_date BETWEEN ?1 AND ?2", from, to)?;
+/// Total khata owed and how many customers owe it.
+pub const KHATA_DUE_SQL: &str = "
+SELECT COALESCE(SUM(b), 0), COUNT(*) FROM (
+  SELECT SUM(amount) AS b FROM khata_entries GROUP BY customer_id) WHERE b > 0";
+
+/// Turns the eight numbers from [`FIGURES_SQL`] into the dashboard figures.
+pub fn figures_from(v: [i64; 8]) -> Figures {
+    let [sales, bills, tax, cost, refunds, tax_refunded, cost_restocked, expenses] = v;
     let net_sales = sales - refunds;
     let sales_tax = tax - tax_refunded;
     let cost_of_sales = cost - cost_restocked;
     let gross_profit = net_sales - sales_tax - cost_of_sales;
-    Ok(Figures {
+    Figures {
         sales,
         bills,
         refunds,
@@ -111,7 +101,19 @@ pub fn figures(conn: &Connection, from: &str, to: &str) -> AppResult<Figures> {
         gross_profit,
         expenses,
         net_profit: gross_profit - expenses,
-    })
+    }
+}
+
+/// Money figures for sales made and expenses paid between two dates.
+pub fn figures(conn: &Connection, from: &str, to: &str) -> AppResult<Figures> {
+    let v = conn.query_row(FIGURES_SQL, params![from, to], |r| {
+        let mut v = [0i64; 8];
+        for (i, slot) in v.iter_mut().enumerate() {
+            *slot = r.get(i)?;
+        }
+        Ok(v)
+    })?;
+    Ok(figures_from(v))
 }
 
 pub fn dashboard(conn: &Connection, period: &Period) -> AppResult<Dashboard> {

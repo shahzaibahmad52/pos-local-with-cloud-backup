@@ -611,3 +611,27 @@ export interface StoreSettings {
   hasRecoveryCode: boolean;
   version: string;
 }
+
+// ---- Cloud backup and head office ----
+
+export interface CloudPage {
+  enabled: boolean;
+  url: string | null;
+  pending: number;
+  lastSyncAt: string | null;
+  lastError: string | null;
+  syncing: boolean;
+  backups: { name: string; size: number }[];
+  backupDir: string | null;
+}
+
+export interface StoreFigures {
+  id: string | null;
+  code: string;
+  name: string;
+  thisStore: boolean;
+  figures: DashboardFigures | null;
+  khataDue: number;
+  lastSyncAt: string | null;
+  error: string | null;
+}
