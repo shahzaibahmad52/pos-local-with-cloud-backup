@@ -4,6 +4,7 @@ import type { BatchDetail, Product, ProductDetail, StoreHeader, TransferNote, Tr
 import { SearchIcon, TrashIcon } from '../components/common';
 import { formatMonth } from '../domain/dates';
 import { ltr } from '../domain/money';
+import { saveFile } from '../platform';
 import { countingUnit, formatStock } from '../domain/stock';
 import { describeError } from '../i18n/errors';
 import { useI18n } from '../i18n/i18n';
@@ -24,11 +25,7 @@ const RECEIVE_REASONS: [string, StringKey][] = [
 
 function downloadNote(note: TransferNote) {
   const blob = new Blob([JSON.stringify(note, null, 1)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `${note.transferNo}.transfer.json`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  return saveFile(`${note.transferNo}.transfer.json`, blob);
 }
 
 export function Transfers({ store, printer, go }: { store: StoreHeader; printer: PrinterSettings; go: (p: Page) => void }) {
@@ -155,7 +152,12 @@ export function Transfers({ store, printer, go }: { store: StoreHeader; printer:
               {t('trPrint')}
             </button>
             {tr.payload && (
-              <button type="button" className="btn btn-primary" onClick={() => downloadNote(tr.payload!)}>
+              <button type="button" className="btn btn-primary" onClick={() =>
+                  void downloadNote(tr.payload!)
+                    .then((path) => path && setMessage(t('savedTo', { file: path })))
+                    .catch((e) => setError(String(e)))
+                }
+              >
                 {t('trDownload')}
               </button>
             )}

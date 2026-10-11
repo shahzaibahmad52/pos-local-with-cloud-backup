@@ -5,6 +5,7 @@ import { COLUMNS, EXAMPLES, readSheet, type Cell } from '../domain/importSheet';
 import { describeError } from '../i18n/errors';
 import { useI18n } from '../i18n/i18n';
 import type { Page } from './Backoffice';
+import { saveFile } from '../platform';
 
 interface Loaded {
   file: string;
@@ -23,15 +24,18 @@ export function ImportProducts({ go }: { go: (p: Page) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const downloadTemplate = async () => {
     const { default: writeXlsxFile } = await import('write-excel-file/browser');
     const header = COLUMNS.map((c) => ({ value: c.title, fontWeight: 'bold' as const, backgroundColor: '#E3F2FB' }));
-    await writeXlsxFile([header, ...EXAMPLES], {
+    const blob = await writeXlsxFile([header, ...EXAMPLES], {
       columns: COLUMNS.map((c) => ({ width: c.width })),
       stickyRowsCount: 1,
-    }).toFile('products-template.xlsx');
+    }).toBlob();
+    const path = await saveFile('products-template.xlsx', blob);
+    if (path) setSaved(t('savedTo', { file: path }));
   };
 
   const choose = async (file: File) => {
@@ -81,7 +85,8 @@ export function ImportProducts({ go }: { go: (p: Page) => void }) {
       ...(loaded.raw.get(p.row) ?? []).map((c) => (c instanceof Date ? c : c === null || c === undefined ? null : typeof c === 'boolean' ? String(c) : c)),
       `Row ${p.row}: ${p.message}`,
     ]);
-    await writeXlsxFile([header, ...rows]).toFile('products-to-fix.xlsx');
+    const path = await saveFile('products-to-fix.xlsx', await writeXlsxFile([header, ...rows]).toBlob());
+    if (path) setSaved(t('savedTo', { file: path }));
   };
 
   const commit = async () => {
@@ -144,6 +149,7 @@ export function ImportProducts({ go }: { go: (p: Page) => void }) {
             <span className="small muted">{t('oneCatalogue')}</span>
           </div>
           {error && <div className="alert alert-bad">{error}</div>}
+          {saved && <div className="alert alert-ok small" role="status">{saved}</div>}
           {done && (
             <div className="alert alert-ok" role="status">
               {done}{' '}
@@ -192,7 +198,7 @@ export function ImportProducts({ go }: { go: (p: Page) => void }) {
               </div>
             )}
             {problems.length > 0 && (
-              <button type="button" className="btn" onClick={() => void downloadFixes()}>
+              <button type="button" className="btn" onClick={() => void downloadFixes().catch((e) => setError(String(e)))}>
                 {t('downloadFix')}
               </button>
             )}

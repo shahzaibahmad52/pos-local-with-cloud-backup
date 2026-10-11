@@ -162,6 +162,55 @@ fn open_whatsapp(url: String) -> Result<(), String> {
     result.map(|_| ()).map_err(|e| format!("Couldn't open WhatsApp: {e}"))
 }
 
+/// Saves a file the app made (an Excel sheet, a transfer file) in the user's
+/// Downloads folder and shows it there. The app's window can't download
+/// files the way a browser does. Returns where it was saved.
+#[tauri::command]
+fn save_download(app: AppHandle, name: String, data_base64: String) -> Result<String, String> {
+    use base64::Engine as _;
+    let data = base64::engine::general_purpose::STANDARD.decode(data_base64).map_err(|e| e.to_string())?;
+    // Only a plain file name; never a path chosen by the page.
+    let name: String = std::path::Path::new(&name)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("download")
+        .chars()
+        .map(|c| if "<>:\"/\\|?*".contains(c) || c.is_control() { '_' } else { c })
+        .collect();
+    let dir = app
+        .path()
+        .download_dir()
+        .or_else(|_| app.path().document_dir())
+        .map_err(|e| format!("No Downloads folder: {e}"))?;
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    // Never overwrite: "report.xlsx", then "report (2).xlsx"…
+    let (stem, ext) = match name.rsplit_once('.') {
+        Some((s, e)) if !s.is_empty() => (s.to_string(), format!(".{e}")),
+        _ => (name.clone(), String::new()),
+    };
+    let mut path = dir.join(&name);
+    let mut n = 2;
+    while path.exists() {
+        path = dir.join(format!("{stem} ({n}){ext}"));
+        n += 1;
+    }
+    fs::write(&path, data).map_err(|e| format!("Couldn't save {}: {e}", path.display()))?;
+    show_in_folder(&path);
+    Ok(path.display().to_string())
+}
+
+/// Opens the folder with the file selected, so the user sees where it went.
+fn show_in_folder(path: &std::path::Path) {
+    #[cfg(windows)]
+    let _ = std::process::Command::new("explorer").arg(format!("/select,{}", path.display())).spawn();
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open").arg("-R").arg(path).spawn();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    if let Some(dir) = path.parent() {
+        let _ = std::process::Command::new("xdg-open").arg(dir).spawn();
+    }
+}
+
 /// Restarts the app so a new device setting (e.g. becoming the main PC) takes effect.
 #[tauri::command]
 fn restart_app(app: AppHandle) {
@@ -197,6 +246,7 @@ pub fn run() {
             print_raster,
             open_cash_drawer,
             open_whatsapp,
+            save_download,
             restart_app
         ])
         .run(tauri::generate_context!())

@@ -7,6 +7,7 @@ import { describeError } from '../i18n/errors';
 import { useI18n } from '../i18n/i18n';
 import type { StringKey } from '../i18n/strings';
 import { MoneySourcePicker, SOURCES, useOpenTills } from './parts';
+import { saveFile } from '../platform';
 
 /** Categories as stored (English) with their Urdu names for the buttons. */
 const CATEGORIES: [string, string][] = [
@@ -95,14 +96,15 @@ export function Expenses({ tillCode }: { tillCode: string }) {
     if (!data) return;
     const { default: writeXlsxFile } = await import('write-excel-file/browser');
     const bold = (v: string) => ({ value: v, fontWeight: 'bold' as const });
-    await writeXlsxFile(
+    const path = await saveFile(`expenses-${month}.xlsx`, await writeXlsxFile(
       [
         [bold('Date'), bold('Category'), bold('Note'), bold('Paid from'), bold('Amount (Rs)'), bold('Entered by')],
         ...data.entries.map((e) => [e.date, e.category, e.note ?? '', e.paidFrom + (e.tillCode ? ` ${e.tillCode}` : ''), e.amount / 100, e.userName]),
         ['', '', '', bold('Total'), { value: data.total / 100, fontWeight: 'bold' as const }, ''],
       ],
       { columns: [{ width: 12 }, { width: 18 }, { width: 30 }, { width: 14 }, { width: 12 }, { width: 14 }] },
-    ).toFile(`expenses-${month}.xlsx`);
+    ).toBlob());
+    if (path) setMessage(t('savedTo', { file: path }));
   };
 
   const max = Math.max(1, ...(data?.byCategory.map(([, v]) => v) ?? [1]));
@@ -123,7 +125,7 @@ export function Expenses({ tillCode }: { tillCode: string }) {
               </option>
             ))}
           </select>
-          <button type="button" className="btn" disabled={!data?.entries.length} onClick={() => void exportExcel()}>
+          <button type="button" className="btn" disabled={!data?.entries.length} onClick={() => void exportExcel().catch((e) => setError(String(e)))}>
             {t('exportExcel')}
           </button>
         </div>

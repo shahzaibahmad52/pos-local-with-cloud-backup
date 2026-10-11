@@ -9,6 +9,7 @@ import { useI18n } from '../i18n/i18n';
 import type { StringKey } from '../i18n/strings';
 import { formatDateTime } from '../print/doc';
 import type { Page } from './Backoffice';
+import { saveFile } from '../platform';
 
 const GROUPS: [StringKey, string[]][] = [
   ['repGroupProfit', ['profit_loss', 'product_profit', 'discounts']],
@@ -154,9 +155,9 @@ export function Reports({ store, go }: { store: StoreHeader; go: (p: Page) => vo
               ? [report.columns.map((c, i) => (i === 0 ? bold(t('repTotal')) : c.key in report.totals! ? value(c, report.totals![c.key]) : null))]
               : []),
           ];
-    await writeXlsxFile([...head, ...data] as never, {
+    await saveFile(`${name}-${dates.from}-${dates.to}.xlsx`, await writeXlsxFile([...head, ...data] as never, {
       columns: (report.lines.length ? [40, 16] : report.columns.map((c) => (c.kind === 'text' ? 28 : 14))).map((width) => ({ width })),
-    }).toFile(`${name}-${dates.from}-${dates.to}.xlsx`);
+    }).toBlob());
   };
 
   const body = report && <ReportBody report={report} fmt={fmt} />;
