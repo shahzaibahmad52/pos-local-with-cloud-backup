@@ -1,0 +1,873 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bizflow POS — User Manual</title>
+<link rel="stylesheet" href="manual.css">
+</head>
+<body>
+
+<!--TOC-->
+
+<!-- ===================================================================== -->
+<section class="chapter">
+<h1 id="intro">Welcome to Bizflow POS</h1>
+
+<p class="lead">Bizflow POS is a point-of-sale and back-office system made for medical stores and general stores in Pakistan. It sells by tablet, strip or box, keeps every batch with its expiry date, runs customer khata (udhaar), and keeps working when the internet is down. Every screen can be shown in English or Urdu.</p>
+
+<p>This manual explains every screen, every field and every button, in the order you will meet them. Each screenshot comes from the real app. The store in the pictures is a demo store called <b>Bizflow Pharmacy</b>.</p>
+
+<h2 id="intro-who">Who uses what</h2>
+<table class="grid">
+<thead><tr><th style="width:26%">Person</th><th style="width:22%">Signs in with</th><th>Can use</th></tr></thead>
+<tbody>
+<tr><td><b>Owner / Admin</b></td><td>Password (8+ characters)</td><td>Everything: the Backoffice (stock, purchases, reports, khata, settings) and the till.</td></tr>
+<tr><td><b>Cashier</b></td><td>4-digit PIN</td><td>The till only: sales, returns, cash in/out, closing their own shift.</td></tr>
+<tr><td><b>Cashier with “Can approve”</b></td><td>4-digit PIN</td><td>The till, and can also approve other cashiers’ actions with their PIN (for example a senior salesman or manager).</td></tr>
+</tbody>
+</table>
+
+<h2 id="intro-words">Words used in this manual</h2>
+<dl class="terms">
+<dt>Main PC</dt><dd>The one computer in each shop that keeps the store’s database. Use your most reliable computer for this.</dd>
+<dt>Extra till</dt><dd>Any other computer in the same shop. It connects to the main PC over the shop network (Wi-Fi or cable).</dd>
+<dt>Store code / Till code</dt><dd>Short codes such as <code>B1</code> and <code>T01</code>. They are printed in every receipt number, e.g. <code>B1-T01-000013</code>.</dd>
+<dt>Smallest unit</dt><dd>The smallest thing you can sell: a tablet, a capsule, a bottle, a piece. Stock is always counted in this unit. Bigger packs (strip, box) are defined as “holds N smallest units”.</dd>
+<dt>Batch</dt><dd>A lot of stock with its own batch number, expiry date and cost. The till always sells the batch that expires first (FEFO: first-expiry, first-out).</dd>
+<dt>Khata (Udhaar)</dt><dd>A customer’s credit account. Bills put on khata are paid later.</dd>
+<dt>Shift</dt><dd>One cashier’s working time on one till, from opening cash to the closing count and Z-report.</dd>
+<dt>Manager PIN / approval</dt><dd>Some actions (big discounts, refunds above a limit, cancelling a bill…) need another person with approval rights to type their PIN.</dd>
+</dl>
+
+<h2 id="intro-conventions">How to read this manual</h2>
+<ul>
+<li><span class="ui">Bold boxed words</span> are buttons or labels exactly as they appear on screen.</li>
+<li><kbd>F2</kbd> style keys are keyboard keys.</li>
+<li>Field tables list every box on a screen: what to type and what it does.</li>
+</ul>
+<div class="tip"><b>Tip</b> Green boxes give shortcuts and good habits.</div>
+<div class="note"><b>Note</b> Blue boxes explain how something works behind the scenes.</div>
+<div class="warn"><b>Important</b> Amber boxes warn about things that cannot be undone or that affect money.</div>
+</section>
+
+<!-- ===================================================================== -->
+<section class="chapter">
+<h1 id="install">Installing and first-time setup</h1>
+
+<h2 id="install-app">Installing the app on Windows</h2>
+<ol class="steps">
+<li>Copy the installer <code>Bizflow POS_x.y.z_x64-setup.exe</code> to the computer (USB drive, WhatsApp desktop or download).</li>
+<li>Double-click it. If Windows shows <span class="ui">Windows protected your PC</span>, click <span class="ui">More info</span> and then <span class="ui">Run anyway</span>. This appears because the installer is not code-signed yet; it is safe to continue.</li>
+<li>Follow the installer. When it finishes, open <b>Bizflow POS</b> from the Start menu or the desktop icon.</li>
+<li>Repeat on every computer in the shop. Do the main PC first.</li>
+</ol>
+<div class="note"><b>Where your data lives</b> On the main PC the store database is the file <code>store.sqlite</code> in <code>C:\Users\&lt;you&gt;\AppData\Roaming\pk.medstore.pos\</code>. Daily copies are kept in the <code>backups</code> folder beside it (see <a href="#set-backups">Daily backup files</a>).</div>
+<div class="tip"><b>Updating to a new version</b> Simply run the new installer over the old one. Your store data is kept. Take a backup first (<span class="ui">Store, Users &amp; Settings → Back up now</span>) to be safe.</div>
+
+<h2 id="install-device">Step 1 — Set up this computer</h2>
+<p>The very first screen asks what this computer is. You see it only once per computer.</p>
+<figure><img src="img/01-device-setup.jpg"><figcaption>Set up this computer</figcaption></figure>
+<table class="fields">
+<thead><tr><th>Field / button</th><th>What to do</th></tr></thead>
+<tbody>
+<tr><td><span class="ui">This is the main PC</span></td><td>Choose this on the first (or only) computer in the shop. It will keep the store’s stock, sales and khata.</td></tr>
+<tr><td><span class="ui">This is an extra till</span></td><td>Choose this on any other counter computer in the same shop.</td></tr>
+<tr><td>Main PC address</td><td>Extra tills only. The network address of the main PC, e.g. <code>192.168.1.10</code>. You can see it on the main PC in Windows network settings. Give the main PC a fixed address in your router so it never changes.</td></tr>
+<tr><td>Till code</td><td>A short name for this counter, e.g. <code>T01</code> for the main counter, <code>T02</code> for the second. It is printed on receipts and must be different on every computer.</td></tr>
+<tr><td><span class="ui">English / اردو</span></td><td>Switches the language of this screen.</td></tr>
+<tr><td><span class="ui">Save &amp; restart</span></td><td>Saves the choice and restarts the app.</td></tr>
+</tbody>
+</table>
+
+<h2 id="install-store">Step 2 — Set up your store (main PC only)</h2>
+<p>On the main PC the next screen creates the store and the owner login.</p>
+<figure><img src="img/02-store-setup.jpg"><figcaption>Set up your store</figcaption></figure>
+<table class="fields">
+<thead><tr><th>Field</th><th>What to enter</th></tr></thead>
+<tbody>
+<tr><td>Store code</td><td>A short code for this branch, e.g. <code>B1</code>. It appears in every receipt number and <b>cannot be changed later</b>. Use a different code for each branch.</td></tr>
+<tr><td>Store name</td><td>The name printed at the top of receipts, e.g. <i>Bizflow Pharmacy</i>.</td></tr>
+<tr><td>Address, Phone</td><td>Printed under the name on receipts.</td></tr>
+<tr><td>Owner name</td><td>The name shown on the sign-in screen for the owner login.</td></tr>
+<tr><td>Password / Password again</td><td>At least 8 characters. Only the owner should know it. It opens the Backoffice.</td></tr>
+<tr><td><span class="ui">Create store</span></td><td>Creates the store database and signs you in.</td></tr>
+<tr><td><span class="ui">Restore from cloud backup</span></td><td>Use this instead when you are replacing a main PC and the store had cloud backup turned on. Paste the database URL and token; everything comes back. See <a href="#set-cloud">Cloud backup</a>.</td></tr>
+</tbody>
+</table>
+<div class="tip"><b>Tip</b> NTN, drug licence number and receipt messages are added later in <a href="#set-store">Store details</a>.</div>
+
+<h2 id="install-firstday">Checklist before the first sale</h2>
+<ol class="steps">
+<li>Fill in <b>Store details</b> (NTN, drug licence, receipt footer and returns policy).</li>
+<li>Add your cashiers in <b>Users &amp; access</b> and give each a PIN.</li>
+<li>Load your products: one by one (<a href="#prod-form">Add product</a>) or all at once from Excel (<a href="#import">Import from Excel</a>).</li>
+<li>Connect the receipt printer on each till (<a href="#till-printer">Printer setup</a>) and print a test receipt.</li>
+<li>Make an <b>owner recovery code</b> and keep it somewhere safe.</li>
+<li>Optional: turn on <b>cloud backup</b>.</li>
+</ol>
+</section>
+
+<!-- ===================================================================== -->
+<section class="chapter">
+<h1 id="signin">Signing in</h1>
+
+<h2 id="signin-cashier">Cashier sign-in with PIN</h2>
+<figure><img src="img/03-login-pin.jpg"><figcaption>Sign in — cashier PIN</figcaption></figure>
+<table class="fields">
+<thead><tr><th>Item</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td>Who is on the till?</td><td>Tap your name. The <span class="ui">All</span> tile lists everyone; each tile shows the person’s role and language.</td></tr>
+<tr><td>PIN pad</td><td>Type your 4-digit PIN with the mouse, touch screen or keyboard number keys. <span class="ui">Clear</span> empties it, <span class="ui">Del</span> removes the last digit. You are signed in as soon as the 4th digit is typed.</td></tr>
+<tr><td><span class="ui">English / اردو</span></td><td>Language for the sign-in screen. After sign-in the app switches to <b>your own</b> saved language.</td></tr>
+</tbody>
+</table>
+<div class="warn"><b>Wrong PINs</b> After several wrong tries the login is locked for a short time. This stops anyone from guessing PINs.</div>
+
+<h2 id="signin-owner">Owner sign-in with password</h2>
+<figure><img src="img/04-login-owner.jpg"><figcaption>Sign in — owner password</figcaption></figure>
+<p>Tap the owner tile, type the password and press <kbd>Enter</kbd> or <span class="ui">Sign in</span>. The owner goes straight to the Backoffice.</p>
+<p><span class="ui">Forgot password?</span> works on the main PC only: type the recovery code you printed from <a href="#set-recovery">Owner recovery code</a> and choose a new password.</p>
+</section>
+
+<!-- ===================================================================== -->
+<section class="chapter">
+<h1 id="till">The till — selling</h1>
+
+<h2 id="till-shift">Starting a shift</h2>
+<p>When a cashier signs in and has no open shift on this till, the app asks for the opening cash.</p>
+<figure class="half"><img src="img/05-open-shift.jpg"><figcaption>Start your shift</figcaption></figure>
+<table class="fields">
+<tbody>
+<tr><td>Cash in the drawer now (Rs)</td><td>Count the float in the drawer and type it, e.g. <code>5000</code>. This is the starting figure for the closing count.</td></tr>
+<tr><td><span class="ui">Start shift &amp; open till</span></td><td>Opens the shift and shows the till. A sale cannot be made without an open shift.</td></tr>
+<tr><td><span class="ui">Back</span></td><td>Return to sign-in without opening a shift.</td></tr>
+</tbody>
+</table>
+
+<h2 id="till-overview">The till screen at a glance</h2>
+<figure><img src="img/10-till-empty.jpg"><figcaption>The till, ready for a new bill</figcaption></figure>
+<p>The screen has three parts: the <b>top bar</b>, the <b>bill</b> on the left and the <b>payment panel</b> on the right.</p>
+<table class="fields">
+<thead><tr><th>Top bar item</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td>Store name · till · cashier · shift time</td><td>Shows where you are and since when the shift is open.</td></tr>
+<tr><td>Connection badge</td><td><span class="ok">Connected to main PC</span> means sales are being saved. A yellow badge means the main PC can’t be reached (see <a href="#till-offline">Selling when the main PC is unreachable</a>).</td></tr>
+<tr><td><span class="ui">English / اردو</span></td><td>Switches the till language for this cashier. The choice is remembered.</td></tr>
+<tr><td><span class="ui">Return / Refund</span> <kbd>F9</kbd></td><td>Opens the returns screen.</td></tr>
+<tr><td><span class="ui">Cash in / out</span></td><td>Records cash put into or taken out of the drawer (not sales).</td></tr>
+<tr><td><span class="ui">Open drawer</span></td><td>Opens the cash drawer without a sale. Usually needs a manager PIN; every opening is logged.</td></tr>
+<tr><td><span class="ui">Close shift</span></td><td>Starts the end-of-shift cash count and Z-report.</td></tr>
+<tr><td><span class="ui">Activity &amp; rules</span>, <span class="ui">Printer</span></td><td>Shown to the owner/admin only: the activity log and this till’s printer setup.</td></tr>
+<tr><td><span class="ui">Sign out</span></td><td>Signs the cashier out. The shift stays open so the next sign-in continues it.</td></tr>
+</tbody>
+</table>
+
+<h2 id="till-search">Finding and adding items</h2>
+<figure><img src="img/11-till-search.jpg"><figcaption>Searching “para” shows every match by name, formula or company</figcaption></figure>
+<ul>
+<li><b>Scan</b> the barcode with the scanner. The item is added at once, in the pack the barcode belongs to (e.g. a box barcode adds one box).</li>
+<li><b>Type</b> part of the brand name, the formula (e.g. <i>paracetamol</i>) or the company. Every word must match, so <i>pan 500</i> finds <i>Panadol 500mg</i>.</li>
+<li>Press <kbd>Enter</kbd> to add the first result, use <kbd>↑</kbd> <kbd>↓</kbd> to pick another one, or click it.</li>
+<li>Each result shows the stock on hand and the price of each pack.</li>
+<li><kbd>F2</kbd> jumps back to the search box from anywhere; <kbd>Esc</kbd> clears the search.</li>
+</ul>
+
+<h2 id="till-bill">The bill</h2>
+<figure><img src="img/12-till-bill.jpg"><figcaption>A bill with a syrup, tablets sold by strip, capsules and sugar sold by rupees</figcaption></figure>
+<table class="fields">
+<thead><tr><th>Column / control</th><th>What it means</th></tr></thead>
+<tbody>
+<tr><td>Item</td><td>Product name, formula, the batch being sold and its expiry. Badges: <span class="tag-rx">Rx</span> prescription required; <span class="tag-amber">Near expiry — sell first</span>; <span class="tag-red">Only N in stock</span> when you ask for more than there is.</td></tr>
+<tr><td>Sell as</td><td>Which pack to sell: e.g. <span class="ui">Tab</span> or <span class="ui">Strip ×6</span>. Only packs ticked “Sell?” on the product appear. The price changes to that pack’s price.</td></tr>
+<tr><td>Qty with <span class="ui">−</span> <span class="ui">+</span></td><td>How many of that pack. Type a number or use the buttons. Scanning the same barcode again adds one more.</td></tr>
+<tr><td>Weight items: <span class="ui">By Rs</span> / <span class="ui">By weight</span></td><td>For loose items such as sugar or rice. <b>By Rs</b>: type the rupee amount the customer wants (Rs 50 = 313 g). <b>By weight</b>: type grams. The quick buttons (<span class="ui">Rs 10</span> … <span class="ui">1 kg</span>) fill common amounts.</td></tr>
+<tr><td>Price / Amount</td><td>Price of one pack and the line total.</td></tr>
+</tbody>
+</table>
+<div class="note"><b>Batches and expiry</b> You never choose a batch at the till. Bizflow sells from the batch with the earliest expiry first, and moves on to the next batch automatically when one runs out. Expired batches are never sold.</div>
+<div class="note"><b>Removing a line</b> Click the remove (bin) button at the end of the line. If the rule <i>Remove a scanned item</i> is on, a manager PIN is needed.</div>
+
+<h2 id="till-pay">Customer, discount and payment</h2>
+<table class="fields">
+<thead><tr><th>Field</th><th>What to do</th></tr></thead>
+<tbody>
+<tr><td>Customer</td><td><span class="ui">Walk-in customer</span> for normal sales. Choose a named customer to print their name on the receipt, or to sell on khata. <span class="ui">+ New customer</span> adds one on the spot (name and phone).</td></tr>
+<tr><td>Items / Subtotal</td><td>Number of lines and the total before discount.</td></tr>
+<tr><td>Discount</td><td><span class="ui">None</span>, <span class="ui">5%</span> or <span class="ui">10%</span> on the whole bill. A discount above the store’s limit (5% by default) needs a manager PIN.</td></tr>
+<tr><td>Total</td><td>What the customer pays. Prices already include sales tax.</td></tr>
+<tr><td>Payment method</td><td><span class="ui">Cash</span>, <span class="ui">Card</span>, <span class="ui">JazzCash</span>, <span class="ui">Easypaisa</span> or <span class="ui">Khata (Udhaar)</span>.</td></tr>
+<tr><td>Cash received</td><td>Cash only. Type what the customer handed over, or tap <span class="ui">Exact</span>, <span class="ui">1,000</span>, <span class="ui">2,000</span>, <span class="ui">5,000</span>. The <b>Change</b> to give back is shown in large figures.</td></tr>
+<tr><td><span class="ui">Cancel bill</span></td><td>Empties the bill. Needs a manager PIN if the rule is on. Logged in the activity log.</td></tr>
+<tr><td><span class="ui">Pay &amp; print receipt</span> <kbd>F12</kbd></td><td>Saves the sale, takes the stock off the shelf, opens the cash drawer (cash sales) and prints the receipt.</td></tr>
+</tbody>
+</table>
+
+<h2 id="till-approval">Manager approval</h2>
+<p>When a cashier does something the store rules don’t allow alone, a box asks for approval. Nothing is saved until someone approves.</p>
+<figure><img src="img/13-approval.jpg"><figcaption>A 10% discount needs a manager PIN</figcaption></figure>
+<ol class="steps">
+<li>The box says why approval is needed (e.g. <i>A discount above 5% needs a manager PIN</i>).</li>
+<li>The approver taps their name under <b>Who is approving?</b>. Only the owner and cashiers marked <i>Can approve</i> are listed.</li>
+<li>They type their PIN (or the owner types the password) and press <span class="ui">Approve</span>.</li>
+</ol>
+<p>Every approval is written in the <a href="#activity">activity log</a> with both names. Several wrong PINs lock that approver for a while.</p>
+<p>The owner sets which actions need approval in <a href="#activity-rules">Needs a manager PIN</a>.</p>
+
+<h2 id="till-saved">Sale saved and the receipt</h2>
+<figure><img src="img/14-sale-saved.jpg"><figcaption>Sale saved — receipt preview and change to give</figcaption></figure>
+<table class="fields">
+<tbody>
+<tr><td>Receipt number</td><td>e.g. <code>B1-T01-000013</code> = store B1, till T01, bill number 13.</td></tr>
+<tr><td>Give change</td><td>The change to hand back, in green.</td></tr>
+<tr><td><span class="ui">Print receipt</span></td><td>Prints (another) copy.</td></tr>
+<tr><td><span class="ui">New sale</span> <kbd>Esc</kbd></td><td>Clears the screen for the next customer. <kbd>F12</kbd> does the same.</td></tr>
+</tbody>
+</table>
+<div class="cols2">
+<figure class="receipt"><img src="img/14b-receipt.jpg"><figcaption>An 80 mm receipt</figcaption></figure>
+<div>
+<h3>Parts of the receipt</h3>
+<ol class="callouts">
+<li><b>Header</b> — store name, address, phone, NTN and drug licence (from Store details).</li>
+<li><b>Bill details</b> — receipt number, date and time, cashier and till, customer.</li>
+<li><b>Lines</b> — product, quantity × price, batch number (<code>B:</code>) and amount. Weight items show grams and price per kg.</li>
+<li><b>Totals</b> — items, subtotal, discount, total, how it was paid and the change.</li>
+<li><b>Returns policy</b> — your own text, set in Store details. Leave it empty to print none.</li>
+<li><b>Footer</b> — your thank-you message.</li>
+<li><b>Barcode</b> — the receipt number as a barcode. Scan it on the returns screen to find the bill instantly.</li>
+</ol>
+<p>Khata sales also print the customer’s balance. When FBR reporting is on, the FBR invoice number and QR code are printed too.</p>
+<p>A customer whose khata profile says <i>Urdu receipt</i> gets an Urdu receipt; everyone else gets the store’s default receipt language.</p>
+</div>
+</div>
+
+<h2 id="till-khata">Selling on khata (udhaar)</h2>
+<figure><img src="img/15-till-khata.jpg"><figcaption>A khata bill for Haji Rasheed, with his balance shown</figcaption></figure>
+<ol class="steps">
+<li>Choose the customer in <b>Customer</b>. Their current balance is shown next to the name.</li>
+<li>Choose <span class="ui">Khata (Udhaar)</span> as the payment method. The note under it confirms the bill will be added to their udhaar.</li>
+<li>Press <span class="ui">Pay &amp; print receipt</span>. If the bill would take them over their credit limit, a manager PIN is needed.</li>
+</ol>
+<p>The bill appears at once in the customer’s ledger under <a href="#khata">Customers &amp; Khata</a>.</p>
+
+<h2 id="till-returns">Returns and refunds</h2>
+<p>Press <kbd>F9</kbd> or <span class="ui">Return / Refund</span>.</p>
+<figure><img src="img/20-returns.jpg"><figcaption>Returns — the original bill is found by its receipt number</figcaption></figure>
+<ol class="steps">
+<li><b>Scan the barcode</b> printed on the customer’s receipt, or type the receipt number, then <span class="ui">Find</span>. Offline receipts (X numbers) can be found the same way once they are synced.</li>
+<li>The bill shows what was sold, what has already been returned and the batch of each line.</li>
+<li>For each item coming back, set the <b>Return</b> quantity with <span class="ui">−</span> <span class="ui">+</span>. You can return part of a strip if it was sold by tablet.</li>
+<li>Choose the <b>Reason</b>: Not needed any more, Wrong item given, Doctor changed medicine, Damaged pack.</li>
+<li>Choose the <b>Condition</b>:
+  <ul>
+  <li><i>Sealed — back to stock</i>: goes back on the shelf under its <b>original batch and expiry</b>.</li>
+  <li><i>Damaged — write off</i>: not added back; recorded as a loss.</li>
+  <li><i>Expired — return to supplier</i>: kept aside for the supplier, not sellable.</li>
+  </ul></li>
+<li>Choose <b>Give refund as</b>: cash, card, JazzCash, Easypaisa, or <i>Khata credit</i> (takes it off the customer’s udhaar). Khata bills can only be refunded to khata.</li>
+<li>Press <span class="ui">Refund &amp; print slip</span>.</li>
+</ol>
+<figure><img src="img/21-refund-slip.jpg"><figcaption>Refund saved — give the customer the amount shown</figcaption></figure>
+<div class="warn"><b>Rules for returns</b> Fridge items are marked <i>not returnable</i> and can’t be returned. Refunds above the store limit (Rs 500 by default) need a manager PIN; several small refunds on the same bill are added together for this check. A cash refund can never be more than the cash in the drawer.</div>
+
+<h2 id="till-cash">Cash in / out of the drawer</h2>
+<figure><img src="img/22-cash-move.jpg"><figcaption>Taking Rs 500 out for generator fuel</figcaption></figure>
+<table class="fields">
+<tbody>
+<tr><td><span class="ui">Take cash out</span> / <span class="ui">Put cash in</span></td><td>Choose the direction. Use <i>Put cash in</i> for change from the bank; <i>Take cash out</i> for small shop payments or handing cash to the owner.</td></tr>
+<tr><td>Amount (Rs)</td><td>The amount moved.</td></tr>
+<tr><td>What is it for?</td><td>A short reason, e.g. <i>Generator fuel</i>, <i>Tea for staff</i>. It appears in the activity log and Z-report.</td></tr>
+<tr><td><span class="ui">Save</span></td><td>Records it and opens the drawer. Taking cash out can be set to need a manager PIN.</td></tr>
+</tbody>
+</table>
+<div class="tip"><b>Tip</b> Shop expenses paid from the drawer can also be recorded in <a href="#expenses">Expenses</a> so they reduce profit in reports.</div>
+
+<h2 id="till-printer">Printer setup</h2>
+<p>Each till has its own printer. The owner opens it with <span class="ui">Printer</span> in the till’s top bar.</p>
+<figure><img src="img/23-printer.jpg"><figcaption>Receipt printer settings with a live preview</figcaption></figure>
+<table class="fields">
+<tbody>
+<tr><td>Printer</td><td>Pick the thermal printer installed in Windows (e.g. EPSON TM-T20III, BlackCopper). <i>Use the print dialog</i> shows Windows’ print box instead.</td></tr>
+<tr><td>Paper</td><td><span class="ui">80 mm</span> (standard) or <span class="ui">58 mm</span>. The preview on the right changes to match.</td></tr>
+<tr><td>Print the receipt automatically after payment</td><td>Prints without asking every time a sale is saved.</td></tr>
+<tr><td>Open the cash drawer after a cash sale</td><td>Kicks the drawer connected to the printer.</td></tr>
+<tr><td>Cut the paper after each receipt</td><td>For printers with an auto-cutter.</td></tr>
+<tr><td><span class="ui">Print test receipt</span> / <span class="ui">Test cash drawer</span></td><td>Check the setup before saving.</td></tr>
+<tr><td><span class="ui">Save</span></td><td>Saves the settings for this till.</td></tr>
+</tbody>
+</table>
+
+<h2 id="till-urdu">Working in Urdu</h2>
+<figure><img src="img/16-till-urdu.jpg"><figcaption>The same till in Urdu, laid out right-to-left</figcaption></figure>
+<p>Tap <span class="ui">اردو</span> in the top bar. The whole screen turns right-to-left, with all labels in Urdu. Product names stay as printed on the pack, and numbers and receipt numbers stay in English digits so they are easy to match. Each cashier’s language is saved with their login.</p>
+
+<h2 id="till-offline">Selling when the main PC is unreachable</h2>
+<figure><img src="img/17-till-offline.jpg"><figcaption>An extra till selling from its own copy while the main PC is off</figcaption></figure>
+<p>If the network or the main PC goes down, an <b>extra till</b> keeps selling from its own copy of the product list. A yellow badge shows <i>Main PC not reachable — selling from this till’s copy</i>.</p>
+<ul>
+<li>Receipts get their own number series with an <b>X</b>, e.g. <code>B1-T02-X000001</code>.</li>
+<li>Payment by cash, card, JazzCash or Easypaisa. Khata, returns and cash moves wait until the main PC is back.</li>
+<li>Prices come from the copy the till downloaded last. The main PC checks every offline sale against that price list when it arrives.</li>
+<li>When the main PC answers again, the waiting sales are sent automatically and the badge turns green. Stock is taken off then.</li>
+<li>If the main PC refuses a sale (for example a price that was never on the list), it is kept and shown to the owner, so nothing is lost.</li>
+</ul>
+<div class="warn"><b>Important</b> Don’t close or reinstall an extra till while it still has offline sales waiting. The till warns you if it cannot store them safely.</div>
+
+<h2 id="till-close">Closing the shift</h2>
+<p>At the end of the shift press <span class="ui">Close shift</span>.</p>
+<h3>1. Count the cash</h3>
+<figure><img src="img/70-close-count.jpg"><figcaption>Count each note; the expected amount stays hidden</figcaption></figure>
+<p>Type <b>how many</b> of each note are in the drawer (5000, 1000, 500, 100, 50, 20, 10) and the total of the coins in rupees. <b>Cash counted</b> adds them up. For cashiers the expected cash is <b>hidden</b> until the count is submitted, so the count stays honest. Press <span class="ui">Submit count</span>.</p>
+<h3>2. Compare with expected cash</h3>
+<figure><img src="img/71-close-result.jpg"><figcaption>Expected vs counted, with the difference</figcaption></figure>
+<table class="fields">
+<tbody>
+<tr><td>Opening cash</td><td>What was in the drawer when the shift started.</td></tr>
+<tr><td>+ Cash sales, + Cash in</td><td>Cash that came in during the shift.</td></tr>
+<tr><td>− Cash out, − Cash refunds</td><td>Cash that left the drawer.</td></tr>
+<tr><td>Expected in drawer</td><td>What should be there.</td></tr>
+<tr><td>Counted / Short / Over</td><td>What you counted, and the difference (red if short).</td></tr>
+<tr><td>Not in the drawer</td><td>Card, JazzCash, Easypaisa and khata totals, for checking against the machine and phone.</td></tr>
+<tr><td>Note</td><td>Required when short or over by more than Rs 100. Explain the difference.</td></tr>
+<tr><td><span class="ui">Recount (allowed once)</span></td><td>Count again if you think you made a mistake. Allowed one time.</td></tr>
+<tr><td><span class="ui">Close shift &amp; print Z-report</span></td><td>Closes the shift and prints the Z-report.</td></tr>
+</tbody>
+</table>
+<h3>3. Z-report</h3>
+<figure><img src="img/72-z-report.jpg"><figcaption>Shift closed — the Z-report</figcaption></figure>
+<p>The Z-report is the printed summary of the shift: bills, sales, returns, every cash figure, the difference and the note. Keep it with the cash. <span class="ui">Print again</span> prints another copy; <span class="ui">Done</span> returns to sign-in. All Z-reports can be seen later in <a href="#reports">Financial reports → Shift closes</a>.</p>
+
+<h2 id="till-keys">Keyboard shortcuts</h2>
+<table class="grid keys">
+<thead><tr><th style="width:22%">Key</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><kbd>F2</kbd></td><td>Go to the search box.</td></tr>
+<tr><td><kbd>Enter</kbd></td><td>In search: add the first (or highlighted) result.</td></tr>
+<tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>Move through search results.</td></tr>
+<tr><td><kbd>F12</kbd></td><td>Pay &amp; print receipt. After a sale: start a new sale.</td></tr>
+<tr><td><kbd>F9</kbd></td><td>Open Return / Refund.</td></tr>
+<tr><td><kbd>Esc</kbd></td><td>Clear the search. After a sale: start a new sale.</td></tr>
+</tbody>
+</table>
+</section>
+
+<!-- ===================================================================== -->
+<section class="chapter">
+<h1 id="bo">The Backoffice</h1>
+<p class="lead">The Backoffice is where the owner manages stock, purchases, money and settings. The owner lands here after signing in.</p>
+
+<h2 id="bo-nav">Moving around</h2>
+<p>The dark menu on the left is always visible.</p>
+<table class="fields">
+<thead><tr><th>Menu item</th><th>What you find there</th></tr></thead>
+<tbody>
+<tr><td>Dashboard</td><td>Today’s figures, sales chart, low stock and expiring items.</td></tr>
+<tr><td>Financial reports</td><td>22 reports on sales, profit, stock, purchases, khata and tax.</td></tr>
+<tr><td>Inventory</td><td>Products, stock and batches; stock counts; branch transfers; Excel import.</td></tr>
+<tr><td>Purchases &amp; Suppliers</td><td>Receiving stock (GRN), purchase history, supplier balances.</td></tr>
+<tr><td>Expenses</td><td>Rent, electricity, salaries and other shop costs.</td></tr>
+<tr><td>Customers &amp; Khata</td><td>Customer credit accounts and payments.</td></tr>
+<tr><td>Approvals &amp; Activity log</td><td>Everything that happened, and the manager-PIN rules.</td></tr>
+<tr><td>All stores</td><td>Figures of all your branches side by side.</td></tr>
+<tr><td>Store, Users &amp; Settings</td><td>Store details, receipt text, users, backups, FBR.</td></tr>
+</tbody>
+</table>
+<p>At the bottom: the <b>cloud backup status</b> (click it to open settings), <span class="ui">Open the till</span> to sell from this computer, the language switch, and <span class="ui">Sign out</span>.</p>
+
+<h2 id="dash">Dashboard</h2>
+<figure><img src="img/30-dashboard.jpg"><figcaption>Dashboard</figcaption></figure>
+<table class="fields">
+<thead><tr><th>Card</th><th>What it shows</th></tr></thead>
+<tbody>
+<tr><td><span class="ui">Today</span> / <span class="ui">Last 7 days</span> / <span class="ui">This month</span></td><td>The period for the figure cards.</td></tr>
+<tr><td>Sales</td><td>Sales after refunds, number of bills and the average bill.</td></tr>
+<tr><td>Gross profit</td><td>Sales minus the cost of the stock sold, and the margin %.</td></tr>
+<tr><td>Expenses</td><td>Shop expenses recorded for the period.</td></tr>
+<tr><td>Net profit</td><td>Gross profit minus expenses. Shown in red when negative (e.g. a day when rent was paid).</td></tr>
+<tr><td>Khata to collect</td><td>Total udhaar customers owe you now, and how many customers.</td></tr>
+<tr><td>Owed to suppliers</td><td>What you owe distributors, and whether any of it is overdue.</td></tr>
+<tr><td>Daily sales — last 14 days</td><td>A bar per day; today is the dark bar.</td></tr>
+<tr><td>How customers paid</td><td>The split between cash, card, JazzCash, Easypaisa and khata.</td></tr>
+<tr><td>Low stock</td><td>Items below their reorder level. <span class="ui">New purchase</span> opens a GRN.</td></tr>
+<tr><td>Expiring within 90 days</td><td>Batches expiring soon or already expired. <span class="ui">View all</span> opens the list in Inventory.</td></tr>
+</tbody>
+</table>
+
+<h2 id="reports">Financial reports</h2>
+<figure><img src="img/31-reports-pl.jpg"><figcaption>Profit &amp; loss report</figcaption></figure>
+<p>Pick a report on the left, choose the period at the top right, and read it on the right. Every report can be printed or saved as a PDF with <span class="ui">Print / PDF</span>, or exported with <span class="ui">Excel</span>.</p>
+<table class="grid small">
+<thead><tr><th style="width:30%">Report</th><th>Use it to…</th></tr></thead>
+<tbody>
+<tr><td colspan="2" class="group">Profit</td></tr>
+<tr><td>Profit &amp; loss</td><td>See gross sales, returns, discounts, cost of goods, gross profit, expenses and net profit.</td></tr>
+<tr><td>Gross profit by product</td><td>Find which products earn the most and which have thin margins.</td></tr>
+<tr><td>Discounts given</td><td>Check every discount, by bill and cashier.</td></tr>
+<tr><td colspan="2" class="group">Sales</td></tr>
+<tr><td>Daily sales summary</td><td>Day-by-day totals.</td></tr>
+<tr><td>Sales by product / category / cashier / payment method</td><td>Break sales down the way you need.</td></tr>
+<tr><td>Returns &amp; refunds</td><td>Every return with reason and condition.</td></tr>
+<tr><td colspan="2" class="group">Cash</td></tr>
+<tr><td>Shift closes (Z-reports)</td><td>Every closed shift with its short/over.</td></tr>
+<tr><td>Cash book (drawers)</td><td>All cash in and out of each drawer, by shift and day.</td></tr>
+<tr><td colspan="2" class="group">Stock</td></tr>
+<tr><td>Stock valuation</td><td>The value of stock on hand at cost and at sale price.</td></tr>
+<tr><td>Stock movement</td><td>Everything that went in and out: sales, purchases, returns, corrections, transfers.</td></tr>
+<tr><td>Expiry report</td><td>Batches expiring within a chosen number of months, with their value.</td></tr>
+<tr><td>Dead / slow stock</td><td>Items that have not sold for a long time, and since when.</td></tr>
+<tr><td colspan="2" class="group">Purchases, khata and tax</td></tr>
+<tr><td>Purchase register</td><td>All GRNs by supplier and invoice.</td></tr>
+<tr><td>Supplier payables</td><td>What you owe each supplier and when it is due.</td></tr>
+<tr><td>Khata receivables &amp; ageing</td><td>Who owes you, and for how long (up to 30, 31–60, 61–90 and over 90 days).</td></tr>
+<tr><td>Sales tax summary</td><td>Sales tax included in sales, for your tax adviser.</td></tr>
+<tr><td>Branch comparison ›</td><td>Opens <a href="#stores">All stores</a>.</td></tr>
+</tbody>
+</table>
+<div class="cols2">
+<figure><img src="img/32-report-expiry.jpg"><figcaption>Expiry report</figcaption></figure>
+<figure><img src="img/33-report-z.jpg"><figcaption>Shift closes (Z-reports)</figcaption></figure>
+</div>
+</section>
+
+<!-- ===================================================================== -->
+<section class="chapter">
+<h1 id="inv">Inventory</h1>
+
+<h2 id="inv-list">Products and stock</h2>
+<figure><img src="img/40-inventory.jpg"><figcaption>Inventory with the selected product’s details on the right</figcaption></figure>
+<table class="fields">
+<thead><tr><th>Item</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td>Header</td><td>Number of products and total stock value at cost.</td></tr>
+<tr><td><span class="ui">Stock count</span>, <span class="ui">Branch transfers</span>, <span class="ui">Import from Excel</span>, <span class="ui">+ Add product</span></td><td>Open those screens (explained below).</td></tr>
+<tr><td>Filters</td><td><span class="ui">All products</span>, <span class="ui">Low stock</span>, <span class="ui">Expiring soon</span>, <span class="ui">Has expired stock</span>, <span class="ui">Medicines</span>, <span class="ui">General items</span>, <span class="ui">Archived</span> (inactive products). The numbers show how many match.</td></tr>
+<tr><td>Search / category</td><td>Search by name, formula, company or barcode; narrow by category.</td></tr>
+<tr><td>Table</td><td>Product, rack, stock in packs and loose units (e.g. <i>15 Strip + 8 Tab</i>), average cost, sale price and next expiry. Click a row to see its details.</td></tr>
+</tbody>
+</table>
+<h3>Product details panel</h3>
+<ul>
+<li><b>Pack sizes &amp; prices</b> and the barcodes, with the pack each barcode belongs to.</li>
+<li><b>Batches</b> in the order they will be sold (earliest expiry first), with expiry, average cost and stock. <span class="ui">Correct</span> fixes the stock of one batch.</li>
+<li>Reorder level, margin, sales tax and prescription status.</li>
+<li><span class="ui">Stock changes</span> opens the full history of that product: every sale, purchase, return and correction with who did it.</li>
+<li><span class="ui">Edit product</span> opens the product form.</li>
+</ul>
+
+<h2 id="inv-correct">Correcting stock</h2>
+<figure><img src="img/41-adjust.jpg"><figcaption>Correct stock of one batch</figcaption></figure>
+<table class="fields">
+<tbody>
+<tr><td>Count on the shelf now</td><td>The real quantity of this batch on the shelf, in the pack shown.</td></tr>
+<tr><td>Why</td><td>Damaged / broken, Expired thrown away, Lost / stolen, Recount, Other. Required.</td></tr>
+<tr><td>Note (optional)</td><td>Any detail, e.g. <i>dropped two bottles</i>.</td></tr>
+<tr><td><span class="ui">Save correction</span></td><td>Sets the stock. The difference is valued at cost and written in the activity log.</td></tr>
+</tbody>
+</table>
+<div class="tip"><b>Tip</b> To check a whole shelf, use a <a href="#counts">stock count</a> instead of correcting batches one by one.</div>
+
+<h2 id="prod-form">Adding and editing a product</h2>
+<figure><img src="img/43-product-new.jpg"><figcaption>Add product — the top of the form</figcaption></figure>
+<h3>Basic details</h3>
+<table class="fields">
+<tbody>
+<tr><td><span class="ui">Medicine</span> / <span class="ui">General item</span></td><td>Medicines get batch, expiry and prescription options; general items are things like milk, soap or sugar.</td></tr>
+<tr><td>Product name *</td><td>As printed on the pack, with strength and form, e.g. <i>Panadol 500mg Tablet</i>. Must be unique.</td></tr>
+<tr><td>Generic / formula</td><td>The salt, e.g. <i>Paracetamol</i>. Lets cashiers search by formula when a brand is out of stock.</td></tr>
+<tr><td>Company</td><td>Manufacturer, e.g. GSK, Getz, Abbott.</td></tr>
+<tr><td>Category</td><td>Your own grouping, e.g. <i>Pain &amp; fever</i>, <i>Antibiotics</i>. Used for filters and reports.</td></tr>
+<tr><td>Rack / location</td><td>Where it sits, e.g. <code>B2</code>. Shown to cashiers and used to count one rack at a time.</td></tr>
+<tr><td>Sales tax</td><td>Exempt (0%) for most medicines. Prices are always tax-inclusive; this only splits out the tax in reports and FBR invoices.</td></tr>
+<tr><td>Prescription required (Rx)</td><td>Shows an <span class="tag-rx">Rx</span> badge at the till as a reminder to ask for the prescription.</td></tr>
+<tr><td>Controlled drug</td><td>Marks narcotics/psychotropics for your records.</td></tr>
+<tr><td>Keep in fridge (not returnable)</td><td>Insulin, vaccines, some injections. These can’t be returned at the till.</td></tr>
+</tbody>
+</table>
+<h3>How is it sold?</h3>
+<table class="fields">
+<tbody>
+<tr><td><span class="ui">In packs</span> / <span class="ui">By weight</span></td><td>Packs for tablets, strips, bottles, pieces. By weight for loose items with a price per kg. <b>This can’t be changed after the product is saved.</b></td></tr>
+<tr><td>Smallest unit</td><td>The unit stock is counted in: Tab, Cap, Btl, Pc, Sachet…</td></tr>
+<tr><td>Pack levels: Name, Urdu name</td><td>Each pack the product comes in, e.g. Tab, Strip, Box. The Urdu name is used on Urdu screens and receipts.</td></tr>
+<tr><td>Holds (smallest units)</td><td>How many smallest units are in the pack: Strip = 10, Box = 200.</td></tr>
+<tr><td>Sale price (Rs)</td><td>The retail price of that pack (MRP).</td></tr>
+<tr><td>Sell?</td><td>Tick the packs the till may sell. Untick <i>Tab</i> if you never sell loose tablets.</td></tr>
+<tr><td><span class="ui">+ Add pack level</span></td><td>Adds another, bigger pack. A hint such as <i>1 Strip = 10 Tab = Rs 40</i> helps you check the numbers.</td></tr>
+</tbody>
+</table>
+<div class="note"><b>Batch prices</b> Each batch keeps the price printed on its pack (from the purchase). A price changed here applies to batches that don’t have their own printed price.</div>
+<figure><img src="img/42-product-form.jpg"><figcaption>Edit product — the full form, including Barcodes</figcaption></figure>
+<h3>Barcodes</h3>
+<table class="fields">
+<tbody>
+<tr><td>Barcode + <i>On pack</i></td><td>The code printed on the pack and which pack it is on. Scanning a box barcode adds a box. A product can have several barcodes; a barcode can belong to only one product.</td></tr>
+<tr><td><span class="ui">+ Add barcode</span></td><td>Adds another row. Click in the box and scan.</td></tr>
+<tr><td><span class="ui">Make in-store barcode</span></td><td>Creates a code for loose items that have none, so you can print a label.</td></tr>
+<tr><td>Bin icon</td><td>Removes that barcode.</td></tr>
+</tbody>
+</table>
+<h3>Right-hand panel</h3>
+<table class="fields">
+<tbody>
+<tr><td>Reorder when below</td><td>When stock falls below this (in the pack you choose), the item shows in <i>Low stock</i>.</td></tr>
+<tr><td>Active (sold on the till)</td><td>Untick to retire a product without losing its history. It moves to <i>Archived</i>.</td></tr>
+<tr><td>Opening stock (new products only)</td><td>Stock already on the shelf: Quantity and pack, Batch no, Expiry (MM/YYYY) and Cost per pack. Later stock comes in through Purchases.</td></tr>
+</tbody>
+</table>
+<p>Buttons: <span class="ui">Save product</span>, <span class="ui">Save &amp; add another</span> (keeps you on a blank form), <span class="ui">Cancel</span>.</p>
+
+<h2 id="import">Import products from Excel</h2>
+<figure><img src="img/44-import.jpg"><figcaption>Import preview — 108 rows ready</figcaption></figure>
+<ol class="steps">
+<li><span class="ui">Download Excel template</span> — saves <code>products-template.xlsx</code> with the right columns and example rows.</li>
+<li>Fill one row per product (or use a distributor’s list with the same columns). See the column guide below.</li>
+<li><span class="ui">Choose Excel file (.xlsx)</span> — Bizflow reads it and shows a preview: <b>New products</b>, <b>Already exist (prices will be updated)</b> and <b>Need fixing</b>. Nothing is saved yet.</li>
+<li>If some rows need fixing, each problem is listed with its row number. <span class="ui">Download rows to fix</span> gives you just those rows with the problem written next to each.</li>
+<li><span class="ui">Import N rows</span> — saves the good rows.</li>
+</ol>
+<div class="note"><b>Matching</b> Existing products are matched by barcode or exact name. Their prices are updated; their stock is not changed. Opening stock is added only for new products.</div>
+<h3>Column guide</h3>
+<table class="grid small">
+<thead><tr><th style="width:38%">Column</th><th>What to put</th></tr></thead>
+<tbody>
+<tr><td>Name *</td><td>Required. Product name with strength and form.</td></tr>
+<tr><td>Generic / formula, Company, Category</td><td>Optional text.</td></tr>
+<tr><td>Type (Medicine / General)</td><td><i>Medicine</i> or <i>General</i>.</td></tr>
+<tr><td>Sold by (Pack / Weight)</td><td><i>Pack</i> for most items; <i>Weight</i> for loose items.</td></tr>
+<tr><td>Smallest unit (Tab, Cap, Btl, Pc)</td><td>The unit stock is counted in.</td></tr>
+<tr><td>Price of smallest unit (Rs)</td><td>Price of one tablet / piece.</td></tr>
+<tr><td>Sell smallest unit loose? (Y/N)</td><td>Y if you sell single tablets.</td></tr>
+<tr><td>Pack 2 name / holds / price</td><td>e.g. <i>Strip</i>, <i>10</i>, <i>40</i>.</td></tr>
+<tr><td>Pack 3 name / holds / price</td><td>e.g. <i>Box</i>, <i>200</i>, <i>780</i>. Holds is always in smallest units.</td></tr>
+<tr><td>Price per kg (Rs, weight items)</td><td>Only for <i>Weight</i> items. Leave empty for packs.</td></tr>
+<tr><td>Barcode / Barcode is on (pack name)</td><td>The code and which pack it is printed on, e.g. <i>Box</i>.</td></tr>
+<tr><td>Rack</td><td>Shelf location.</td></tr>
+<tr><td>Sales tax %</td><td>Usually 0 for medicines.</td></tr>
+<tr><td>Prescription needed? (Y/N)</td><td>Shows the Rx badge at the till.</td></tr>
+<tr><td>Reorder when below (smallest units)</td><td>e.g. 100 tablets.</td></tr>
+<tr><td>Opening stock (smallest units, or grams)</td><td>Stock on hand now. Grams for weight items.</td></tr>
+<tr><td>Batch no / Expiry (MM/YYYY)</td><td>For the opening stock.</td></tr>
+<tr><td>Cost (Rs) of smallest unit, or per kg</td><td>What you paid, for profit reports.</td></tr>
+</tbody>
+</table>
+
+<h2 id="counts">Stock count</h2>
+<p>Count one shelf at a time while the shop keeps selling.</p>
+<figure><img src="img/45-counts.jpg"><figcaption>Start a stock count</figcaption></figure>
+<table class="fields">
+<tbody>
+<tr><td>What to count</td><td><i>Whole shop</i>, one rack (e.g. <i>Rack A1 · 5 batches</i>) or <i>Items with no rack</i>.</td></tr>
+<tr><td>Blind count</td><td>Hides the system quantity until each line is counted, so counters don’t just copy the number.</td></tr>
+<tr><td><span class="ui">Start counting</span></td><td>Creates the count sheet. Earlier counts are listed under <b>Counts</b> with their status (In progress, Applied, Cancelled).</td></tr>
+</tbody>
+</table>
+<figure><img src="img/46-count-detail.jpg"><figcaption>Count sheet for Rack A1</figcaption></figure>
+<ul>
+<li>For each batch type the count in packs and loose units. The <b>Difference</b> appears in red (short) or green (extra), and <b>Short at cost</b> / <b>Extra at cost</b> total it in rupees.</li>
+<li>Choose a <b>Reason</b> for differences.</li>
+<li>Found an item that isn’t on the list? Scan or search it in the box at the top to add it.</li>
+<li>Each line is saved as you type, so you can leave and come back.</li>
+<li><span class="ui">Apply count</span> corrects only the batches you counted. <span class="ui">Cancel count</span> throws it away; nothing changes.</li>
+</ul>
+<div class="note"><b>Selling during a count</b> When you count a batch, its system stock at that moment is noted. Sales made after that are kept, so you don’t need to close the shop.</div>
+
+<h2 id="transfers">Branch transfers</h2>
+<p>Move stock to another branch instead of buying more.</p>
+<figure><img src="img/47-transfers.jpg"><figcaption>Branch transfers home</figcaption></figure>
+<p><b>Coming to this branch</b> lists transfers sent to you by branches in your <a href="#stores">All stores</a> list. <span class="ui">Open a transfer file</span> loads a file sent by WhatsApp or USB. On the right is the history of sent and received transfers.</p>
+<h3>Sending stock</h3>
+<figure><img src="img/48-transfer-send.jpg"><figcaption>Send stock to branch B2</figcaption></figure>
+<table class="fields">
+<tbody>
+<tr><td>Send to branch / Branch code / Branch name</td><td>Pick a branch from your list, or <i>Another branch…</i> and type its code and name.</td></tr>
+<tr><td>Carried by / note</td><td>Who is taking it, e.g. rider name.</td></tr>
+<tr><td>Product search</td><td>Scan or search each product to send.</td></tr>
+<tr><td>Batch, Qty</td><td>Pick the batch and the quantity in packs and loose units. Expired batches can’t be sent.</td></tr>
+<tr><td><span class="ui">Send stock</span></td><td>Takes the stock off this branch and creates a transfer note. You can then <span class="ui">Print transfer slip</span> and <span class="ui">Download transfer file</span> (for a branch that doesn’t read your cloud backup).</td></tr>
+</tbody>
+</table>
+<h3>Receiving stock</h3>
+<p>Open the incoming transfer, check each line and type what actually arrived. Choose a reason for any difference (Broken in transit, Missing, Sent less by mistake), then <span class="ui">Confirm received</span>. The stock is added under the same batch numbers and expiry dates.</p>
+</section>
+
+<!-- ===================================================================== -->
+<section class="chapter">
+<h1 id="purchases">Purchases &amp; suppliers</h1>
+
+<h2 id="grn">New purchase (GRN)</h2>
+<p>Use this every time stock arrives from a distributor. It adds the stock with its batches and records what you owe.</p>
+<figure><img src="img/50b-grn-lines.jpg"><figcaption>Receiving two products from Distributor A on 30 days credit</figcaption></figure>
+<table class="fields">
+<thead><tr><th>Field</th><th>What to enter</th></tr></thead>
+<tbody>
+<tr><td>Supplier / distributor</td><td>Choose the supplier. Their current balance is shown. <i>+ New supplier</i> at the bottom of the list adds one.</td></tr>
+<tr><td>Supplier invoice no.</td><td>The number on the distributor’s bill, so you can find it later.</td></tr>
+<tr><td>Invoice date</td><td>Date on the bill.</td></tr>
+<tr><td>Payment terms</td><td><i>Cash on delivery</i> or credit days (e.g. 30 days). Sets the due date in Supplier payables.</td></tr>
+<tr><td>Product search</td><td>Scan or search each product to add a line.</td></tr>
+<tr><td>Pack</td><td>The pack the distributor bills in (Box, Strip…).</td></tr>
+<tr><td>Batch / Expiry</td><td>From the pack. Expiry as MM/YYYY.</td></tr>
+<tr><td>Qty / Bonus</td><td>Packs billed, and free bonus packs. Bonus packs add to stock at no cost and lower your average cost.</td></tr>
+<tr><td>Trade price / Disc %</td><td>Price per pack on the invoice and any line discount.</td></tr>
+<tr><td>Sale (MRP)</td><td>The retail price printed on this batch. Leave empty to keep the product’s current price.</td></tr>
+<tr><td>Cost</td><td>Shown at the end of each line: the real cost per pack after bonus, discount and freight.</td></tr>
+<tr><td>Freight / other charges</td><td>Delivery charges. They are spread over the lines by value.</td></tr>
+<tr><td>Net payable</td><td>What you owe for this invoice.</td></tr>
+<tr><td>Paid now</td><td>Amount paid on delivery. The rest goes to the supplier’s balance.</td></tr>
+<tr><td><span class="ui">Receive stock</span></td><td>Saves the purchase and adds the stock.</td></tr>
+</tbody>
+</table>
+
+<h2 id="purchase-history">Purchase history</h2>
+<figure><img src="img/51-purchase-history.jpg"><figcaption>Purchase history</figcaption></figure>
+<p>Every GRN with date, number, supplier, invoice number, amount and status. Click one to see its lines.</p>
+
+<h2 id="suppliers">Suppliers &amp; payables</h2>
+<figure><img src="img/52-suppliers.jpg"><figcaption>Supplier payables and ledger</figcaption></figure>
+<ul>
+<li>The left list shows each supplier with their terms and balance, and when the next amount is due. <span class="ui">+ New supplier</span> adds one.</li>
+<li>The right side shows the selected supplier’s balance and ledger: each invoice (<i>Bought +</i>) and payment (<i>Paid −</i>) with the running balance.</li>
+<li><span class="ui">Edit</span> changes name, phone and terms. <span class="ui">Add old balance</span> enters what you owed before using Bizflow.</li>
+</ul>
+<figure class="half"><img src="img/52b-supplier-pay.jpg"><figcaption>Record payment</figcaption></figure>
+<table class="fields">
+<tbody>
+<tr><td>Amount (Rs)</td><td>Amount paid. <span class="ui">Full balance</span> fills the whole balance.</td></tr>
+<tr><td>Paid from</td><td><i>Owner cash</i>, <i>Bank</i>, <i>Cash drawer</i> or JazzCash / Easypaisa. Paying from the cash drawer reduces that drawer’s expected cash.</td></tr>
+<tr><td>Note</td><td>Cheque number, etc.</td></tr>
+</tbody>
+</table>
+</section>
+
+<!-- ===================================================================== -->
+<section class="chapter">
+<h1 id="money">Expenses and khata</h1>
+
+<h2 id="expenses">Expenses</h2>
+<figure><img src="img/53-expenses.jpg"><figcaption>Expenses for October</figcaption></figure>
+<table class="fields">
+<tbody>
+<tr><td>Category</td><td>Electricity, Generator fuel, Rent, Salaries, Internet &amp; phone, Tea &amp; food, Repairs, Other.</td></tr>
+<tr><td>Amount (Rs), Date</td><td>How much and when.</td></tr>
+<tr><td>Paid from</td><td>Owner cash, Bank, Cash drawer or JazzCash / Easypaisa. <i>Cash drawer</i> takes it out of the till’s expected cash.</td></tr>
+<tr><td>Note</td><td>e.g. <i>Petrol 12 L</i>.</td></tr>
+<tr><td><span class="ui">Save expense</span></td><td>Adds it. Expenses are taken off profit on the dashboard and in Profit &amp; loss.</td></tr>
+<tr><td>Month / <span class="ui">Export to Excel</span></td><td>Choose the month; export the list.</td></tr>
+<tr><td>Entries → <span class="ui">Delete</span></td><td>Removes a mistaken entry (logged).</td></tr>
+</tbody>
+</table>
+
+<h2 id="khata">Customers &amp; khata</h2>
+<figure><img src="img/54-khata.jpg"><figcaption>A customer’s khata with credit limit and ledger</figcaption></figure>
+<table class="fields">
+<thead><tr><th>Item</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td>Total to collect</td><td>All udhaar outstanding.</td></tr>
+<tr><td>Overdue (30+ days)</td><td>Customers who haven’t paid for more than 30 days.</td></tr>
+<tr><td>Collected this month</td><td>Payments received by cash, JazzCash, Easypaisa or bank.</td></tr>
+<tr><td>Near credit limit</td><td>Customers close to their limit. The till asks for a PIN before going over.</td></tr>
+<tr><td><span class="ui">All</span> / <span class="ui">Has balance</span> / <span class="ui">Overdue</span>, search</td><td>Find a customer by name or phone.</td></tr>
+<tr><td>Balance due / Credit limit bar</td><td>What they owe and how much of their limit is used.</td></tr>
+<tr><td><span class="ui">Receive payment</span></td><td>Records money the customer pays (see below).</td></tr>
+<tr><td><span class="ui">WhatsApp reminder</span></td><td>Opens WhatsApp with a polite reminder already typed. You press Send, so it is free.</td></tr>
+<tr><td><span class="ui">Print statement</span></td><td>Prints the ledger on the receipt printer.</td></tr>
+<tr><td><span class="ui">Edit</span></td><td>Name, phone, credit limit, receipt language, active.</td></tr>
+<tr><td><span class="ui">Add old balance</span></td><td>Enters udhaar from your old register.</td></tr>
+<tr><td>Ledger</td><td>Every bill (<i>Udhaar +</i>), payment and refund (<i>Paid −</i>) with the running balance. Khata bills are added automatically from the till.</td></tr>
+<tr><td><span class="ui">+ Add customer</span></td><td>Create a customer before their first khata sale.</td></tr>
+</tbody>
+</table>
+<figure class="half"><img src="img/55-khata-payment.jpg"><figcaption>Receive payment</figcaption></figure>
+<table class="fields">
+<tbody>
+<tr><td>Amount received</td><td>What the customer paid. <span class="ui">Full balance</span> fills it in.</td></tr>
+<tr><td>Paid by</td><td>Cash, JazzCash, Easypaisa or Bank.</td></tr>
+<tr><td>Cash goes into</td><td>For cash: the drawer that received it, so the shift’s expected cash is right.</td></tr>
+<tr><td><span class="ui">Save &amp; print receipt</span></td><td>Records the payment and prints a receipt with the new balance.</td></tr>
+</tbody>
+</table>
+</section>
+
+<!-- ===================================================================== -->
+<section class="chapter">
+<h1 id="control">Control and branches</h1>
+
+<h2 id="activity">Approvals &amp; activity log</h2>
+<figure><img src="img/56-activity.jpg"><figcaption>Activity log with the manager-PIN rules on the right</figcaption></figure>
+<p>Every important action is written here: sales approved with a PIN, refunds, cancelled bills, cash in/out, drawer openings, stock corrections, price changes and shift opens/closes. <b>Entries can’t be edited or deleted.</b></p>
+<table class="fields">
+<tbody>
+<tr><td>Top cards</td><td>PIN approvals, bills cancelled, cash short/over and items that need attention for the chosen day.</td></tr>
+<tr><td>Filters</td><td><span class="ui">All</span>, <span class="ui">Needs attention</span>, <span class="ui">Approvals</span>, <span class="ui">Money</span>, <span class="ui">Stock</span>, and the date.</td></tr>
+<tr><td>Columns</td><td>Time, till, user, what happened (with details such as receipt number and amount) and who approved it.</td></tr>
+</tbody>
+</table>
+<h3 id="activity-rules">Needs a manager PIN</h3>
+<table class="fields">
+<tbody>
+<tr><td>Discount above (%)</td><td>Discounts higher than this need approval. Default 5.</td></tr>
+<tr><td>Refund above (Rs)</td><td>Refunds higher than this need approval. Default 500.</td></tr>
+<tr><td>Remove a scanned item</td><td>Stops items from being quietly removed after scanning.</td></tr>
+<tr><td>Cancel a whole bill</td><td>Needs approval to cancel.</td></tr>
+<tr><td>Take cash out of the drawer</td><td>Needs approval for cash out.</td></tr>
+<tr><td>Open the drawer without a sale</td><td>Needs approval for <i>Open drawer</i>.</td></tr>
+<tr><td><span class="ui">Save rules</span></td><td>Applies the rules on every till at once.</td></tr>
+</tbody>
+</table>
+
+<h2 id="stores">All stores</h2>
+<figure><img src="img/57-stores.jpg"><figcaption>All stores — branch comparison</figcaption></figure>
+<p>See every branch’s sales, gross profit, expenses, net profit, khata and last sync time in one table, for Today, Last 7 days or This month. Each branch must have <a href="#set-cloud">cloud backup</a> on.</p>
+<p><span class="ui">+ Add a store</span>: paste the other store’s cloud database URL and a token (a read-only token is best). Its figures are read from the cloud. A store with no internet keeps selling; its figures catch up here once it is back online.</p>
+</section>
+
+<!-- ===================================================================== -->
+<section class="chapter">
+<h1 id="settings">Store, users &amp; settings</h1>
+
+<h2 id="set-store">Store details and receipt</h2>
+<figure><img src="img/61-set-store.jpg"><figcaption>Store details and receipt text</figcaption></figure>
+<table class="fields">
+<tbody>
+<tr><td>Store name, Phone, Address</td><td>Printed at the top of receipts.</td></tr>
+<tr><td>NTN</td><td>Your National Tax Number, printed on receipts.</td></tr>
+<tr><td>Drug license no.</td><td>Printed on receipts as <i>Drug Lic</i>.</td></tr>
+<tr><td>Receipt footer (English / اردو)</td><td>The last line of the receipt, e.g. <i>Thank you! Get well soon.</i></td></tr>
+<tr><td>Returns policy on receipts (English / اردو)</td><td>Printed above the footer, e.g. <i>Medicines returnable within 7 days with this receipt…</i>. <b>Leave a box empty to print no policy</b> in that language.</td></tr>
+<tr><td>Default receipt language</td><td>English or Urdu. A customer’s own choice (on their khata profile) overrides this.</td></tr>
+<tr><td><span class="ui">Save</span></td><td>Saves; the next receipt uses the new text.</td></tr>
+</tbody>
+</table>
+<p>The store code (e.g. B1) is shown at the top and can’t be changed, because it is inside every receipt number.</p>
+
+<h2 id="set-users">Users &amp; access</h2>
+<figure><img src="img/62-set-users.jpg"><figcaption>Users &amp; access</figcaption></figure>
+<p>The list shows each person’s role, language and whether they are active. <span class="tag-ok">PIN ✓</span> means the cashier can approve. <span class="ui">+ Add user</span> creates a login; <span class="ui">Edit</span> changes one.</p>
+<figure class="half"><img src="img/63-user-dialog.jpg"><figcaption>Edit user</figcaption></figure>
+<table class="fields">
+<tbody>
+<tr><td>Name</td><td>Shown on the sign-in screen, receipts and the activity log.</td></tr>
+<tr><td>Role (new users)</td><td><i>Cashier · Till only</i> or <i>Admin · Backoffice + Till</i>.</td></tr>
+<tr><td>PIN (4 digits) / Password</td><td>Cashiers use a 4-digit PIN; admins a password of 8+ characters. When editing, leave empty to keep the current one.</td></tr>
+<tr><td>Language</td><td>The language the app opens in for this person.</td></tr>
+<tr><td>Can approve (manager PIN)</td><td>Lets this cashier approve discounts, refunds etc. for others.</td></tr>
+<tr><td>Active</td><td>Untick when someone leaves. Their history stays; they can no longer sign in.</td></tr>
+</tbody>
+</table>
+<div class="warn"><b>Important</b> Give every person their own login and never share PINs. The activity log is only as honest as the logins.</div>
+
+<h2 id="set-recovery">Owner recovery code</h2>
+<figure class="half"><img src="img/64-set-recovery.jpg"><figcaption>Owner recovery code</figcaption></figure>
+<p>If the owner password is forgotten, this code sets a new one on the main PC. Press <span class="ui">Make a new recovery code</span>, write it down or print it, and keep it somewhere safe outside the shop. The code is shown <b>only once</b>. It works once; make a new one after using it. Making a new code stops any older code from working.</p>
+
+<h2 id="set-cloud">Cloud backup</h2>
+<figure class="half"><img src="img/65-set-cloud.jpg"><figcaption>Cloud backup</figcaption></figure>
+<p>Each store gets its own free Turso database. With cloud backup on, every sale and change is copied to the cloud within moments, so a broken or stolen PC loses nothing, and the owner can see all branches in <a href="#stores">All stores</a>.</p>
+<ol class="steps">
+<li>Create a free account at turso.tech. Create a database for this store (e.g. <code>store-b1</code>).</li>
+<li>Copy its <b>Database URL</b> (starts with <code>libsql://</code>) and create a <b>token</b>.</li>
+<li>Paste both here and press <span class="ui">Turn on cloud backup</span>.</li>
+</ol>
+<p>The status in the bottom-left of the Backoffice shows <i>Cloud backed up · 12:41</i>, <i>Offline · N changes waiting</i> (no internet; it catches up automatically) or <i>Cloud backup off</i>. While off, nothing leaves this PC. Private settings such as the FBR token are never sent to the cloud.</p>
+
+<h2 id="set-backups">Daily backup files</h2>
+<figure class="half"><img src="img/66-set-backups.jpg"><figcaption>Daily backup files</figcaption></figure>
+<p>A copy of the store database is made on the main PC once a day; the last 14 are kept in the folder shown. <span class="ui">Back up now</span> makes one immediately. Copy one to a USB drive now and then, and always before reinstalling Windows.</p>
+
+<h2 id="set-addons">Paid add-ons</h2>
+<figure class="half"><img src="img/67-set-addons.jpg"><figcaption>Paid add-ons</figcaption></figure>
+<p>SMS OTP for password reset and automatic WhatsApp messages need a paid SMS/WhatsApp provider and are off. While off, the free option is used: the owner recovery code, and the WhatsApp button that opens WhatsApp with the message typed for you.</p>
+
+<h2 id="set-fbr">FBR invoice reporting</h2>
+<figure><img src="img/68-set-fbr.jpg"><figcaption>FBR invoice reporting (PRAL)</figcaption></figure>
+<p>For Tier-1 retailers who must report every sale to FBR. When on, each sale and refund is sent to FBR (PRAL) and the receipt shows FBR’s invoice number and QR code. A sale never waits for FBR: if FBR can’t be reached the invoice is queued and sent later.</p>
+<table class="fields">
+<tbody>
+<tr><td>Send invoices to FBR</td><td>Turns reporting on.</td></tr>
+<tr><td>Service</td><td><span class="ui">Sandbox (testing)</span> first, then <span class="ui">Live</span> once FBR approves you.</td></tr>
+<tr><td>POS ID (from FBR)</td><td>The POS ID FBR gave you for this store.</td></tr>
+<tr><td>Token (from FBR)</td><td>Your API token. Kept on this PC only.</td></tr>
+<tr><td>PCT code for items</td><td>Tariff code sent with each item. <code>3004.9099</code> is medicines; ask your tax adviser for general items.</td></tr>
+<tr><td>Service address</td><td>Only change if FBR changes its address.</td></tr>
+<tr><td><span class="ui">Save FBR settings</span></td><td>Saves. Invoices that couldn’t be sent are listed with <span class="ui">Send waiting invoices now</span>.</td></tr>
+</tbody>
+</table>
+<div class="warn"><b>Important</b> Test with your sandbox POS ID before switching to Live.</div>
+</section>
+
+<!-- ===================================================================== -->
+<section class="chapter">
+<h1 id="routines">Daily routines</h1>
+<div class="cols2 routine">
+<div class="box">
+<h3>Opening the shop</h3>
+<ol>
+<li>Switch on the <b>main PC first</b>, then the extra tills.</li>
+<li>Each cashier signs in and enters the opening cash.</li>
+<li>Check the connection badge is green on every till.</li>
+<li>Owner: glance at <b>Dashboard → Expiring within 90 days</b> and move those items to the front.</li>
+</ol>
+</div>
+<div class="box">
+<h3>During the day</h3>
+<ol>
+<li>Receive every delivery as a <b>GRN</b> with batch and expiry.</li>
+<li>Record shop costs in <b>Expenses</b> or as <b>Cash out</b>.</li>
+<li>Put khata payments in <b>Receive payment</b>.</li>
+<li>Check <b>Low stock</b> before calling the distributor.</li>
+</ol>
+</div>
+<div class="box">
+<h3>Closing the shop</h3>
+<ol>
+<li>Each cashier <b>closes their shift</b>, counts notes and prints the Z-report.</li>
+<li>Owner: open <b>Activity log → Needs attention</b>.</li>
+<li>Check the cloud status says <i>Cloud backed up</i>.</li>
+<li>Shut down extra tills first, the main PC last.</li>
+</ol>
+</div>
+<div class="box">
+<h3>Weekly / monthly</h3>
+<ol>
+<li>Count one or two racks each week with <b>Stock count</b>.</li>
+<li>Run the <b>Expiry report</b> and return expiring stock to suppliers.</li>
+<li>Send <b>WhatsApp reminders</b> to overdue khata customers.</li>
+<li>Pay suppliers from <b>Supplier payables</b>.</li>
+<li>Copy a daily backup file to USB.</li>
+</ol>
+</div>
+</div>
+</section>
+
+<!-- ===================================================================== -->
+<section class="chapter">
+<h1 id="faq">Troubleshooting &amp; questions</h1>
+<dl class="faq">
+<dt>An extra till says “Can’t reach the main PC”.</dt>
+<dd>Check the main PC is on and Bizflow POS is open on it, and that both are on the same Wi-Fi/network. If the main PC’s address changed, use <span class="ui">Change this computer’s setup</span> and type the new address. Give the main PC a fixed IP in your router so this doesn’t happen again. Meanwhile the extra till can keep selling offline.</dd>
+<dt>The receipt doesn’t print.</dt>
+<dd>Owner: open <span class="ui">Printer</span> on that till, choose the right printer and paper width, and press <span class="ui">Print test receipt</span>. Make sure the printer is switched on, has paper and is installed in Windows.</dd>
+<dt>The scanner adds nothing.</dt>
+<dd>Click in the search box (or press <kbd>F2</kbd>) and scan again. If the item is not found, the barcode is not saved on any product: add it in <span class="ui">Edit product → Barcodes</span>.</dd>
+<dt>A cashier forgot their PIN.</dt>
+<dd>Owner: <span class="ui">Store, Users &amp; Settings → Users → Edit</span>, type a new PIN and save.</dd>
+<dt>The owner forgot the password.</dt>
+<dd>On the main PC tap <span class="ui">Forgot password?</span> and type the recovery code. Without a recovery code, contact your Bizflow support person.</dd>
+<dt>Stock on screen doesn’t match the shelf.</dt>
+<dd>Look at <span class="ui">Stock changes</span> on the product to see what happened, then fix it with <span class="ui">Correct</span> or a stock count. Check that deliveries were received as GRNs and returns were done on the returns screen.</dd>
+<dt>Cash is short at closing.</dt>
+<dd>Recount once. Check the Z-report’s cash out and refunds lines and the activity log for that shift. Write the reason in the note.</dd>
+<dt>Windows says the installer is unsafe.</dt>
+<dd>Click <span class="ui">More info → Run anyway</span>. The installer is not code-signed yet.</dd>
+<dt>We are moving the main PC to a new computer.</dt>
+<dd>With cloud backup: install on the new PC, choose <i>This is the main PC</i>, then <span class="ui">Restore from cloud backup</span>. Without it: copy the latest daily backup file to the new PC and ask your support person to restore it.</dd>
+</dl>
+
+<div class="end">
+<img src="img/bizflow-logo.svg" alt="Bizflow">
+<p>Bizflow POS — made for Pakistani medical and general stores.</p>
+</div>
+</section>
+
+</body>
+</html>

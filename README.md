@@ -4,6 +4,8 @@ Point-of-sale for a medicine and general store in Pakistan. It is built to work 
 
 UI design (all screens): https://claude.ai/artifact/DdLH1Rp4aDxSGTM2m2EKUz
 
+User manual (PDF, with screenshots): [docs/Bizflow-POS-User-Manual.pdf](docs/Bizflow-POS-User-Manual.pdf). Its source is in `docs/manual/`; rebuild it with `node docs/manual/build.cjs`.
+
 ## What works now
 
 ### Milestone 6: stock counts, branch transfers, offline tills, FBR

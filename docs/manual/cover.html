@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 0; }
+  html, body { margin: 0; overflow: hidden; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { width: 210mm; height: 297mm; font-family: 'Inter', 'Segoe UI', Arial, sans-serif; color: #111c2b; position: relative; overflow: hidden; background: #fff; }
+  .top { height: 150mm; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+  .logo { width: 150mm; margin-top: 10mm; }
+  .tag { margin-top: -6mm; font-size: 12pt; letter-spacing: .35em; text-transform: uppercase; color: #337fca; font-weight: 600; }
+  .band { position: absolute; left: 0; right: 0; bottom: 0; height: 147mm; overflow: hidden; background: linear-gradient(160deg, #0b2236 0%, #12324d 55%, #054e77 100%); color: #e3edf6; padding: 26mm 22mm 0; }
+  .band::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 3mm; background: linear-gradient(90deg, #3eebf2, #28abe3 40%, #076599); }
+  .kicker { font-size: 10pt; letter-spacing: .3em; text-transform: uppercase; color: #5cc8f0; font-weight: 700; }
+  h1 { margin: 6mm 0 4mm; font-size: 44pt; line-height: 1.05; color: #fff; font-weight: 800; }
+  .sub { font-size: 14pt; color: #9fb6cb; max-width: 150mm; line-height: 1.45; }
+  .chips { margin-top: 12mm; display: flex; gap: 3mm; flex-wrap: wrap; max-width: 165mm; }
+  .chips span { border: 1px solid #234a6b; background: rgba(255,255,255,.04); border-radius: 20px; padding: 2mm 4.5mm; font-size: 9.5pt; color: #cfe3f3; }
+  .foot { position: absolute; left: 22mm; right: 22mm; bottom: 16mm; display: flex; justify-content: space-between; font-size: 9pt; color: #9fb6cb; border-top: 1px solid #234a6b; padding-top: 4mm; }
+  .ur { font-family: 'Noto Nastaliq Urdu', 'Noto Naskh Arabic', serif; }
+  .mark { position: absolute; right: -28mm; bottom: 40mm; width: 110mm; opacity: .07; }
+</style>
+</head>
+<body>
+  <div class="top">
+    <img class="logo" src="img/bizflow-logo.svg" alt="Bizflow">
+    <div class="tag">Point of Sale</div>
+  </div>
+  <div class="band">
+    <img class="mark" src="img/bizflow-mark.svg" alt="">
+    <div class="kicker">Bizflow POS</div>
+    <h1>User Manual</h1>
+    <div class="sub">A complete guide to the till and the backoffice for medical and general stores: every screen, every field and every button, with real screenshots.</div>
+    <div class="chips">
+      <span>Till &amp; receipts</span><span>Returns</span><span>Shift close</span><span>Inventory &amp; batches</span><span>Purchases</span><span>Khata</span><span>Reports</span><span>Cloud backup</span><span>FBR</span>
+    </div>
+    <div class="foot"><span>App version 0.1 · October 2026</span><span>English · اردو</span></div>
+  </div>
+</body>
+</html>
