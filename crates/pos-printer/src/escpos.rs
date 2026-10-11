@@ -5,6 +5,9 @@
 const ESC: u8 = 0x1B;
 const GS: u8 = 0x1D;
 
+/// The tallest image accepted, in rows.
+pub const MAX_HEIGHT: usize = 200_000;
+
 /// Rows per `GS v 0` command. Some printers have small buffers, so a tall
 /// receipt is sent as several bands.
 const BAND_ROWS: usize = 255;
@@ -33,7 +36,8 @@ impl Raster<'_> {
         if self.width == 0 || self.width > 2048 {
             return Err(format!("Image width {} is not supported.", self.width));
         }
-        if self.height == 0 || self.height > 30_000 {
+        // 200,000 rows is 25 m of paper at 8 dots/mm: any real bill or statement.
+        if self.height == 0 || self.height > MAX_HEIGHT {
             return Err(format!("Image height {} is not supported.", self.height));
         }
         let expected = self.bytes_per_row() * self.height;
@@ -123,5 +127,8 @@ mod tests {
         let bits = [0u8; 3];
         assert!(raster_job(&Raster { width: 16, height: 2, bits: &bits }, JobOptions::default()).is_err());
         assert!(raster_job(&Raster { width: 0, height: 1, bits: &[] }, JobOptions::default()).is_err());
+        // A long bill (about 700 lines) goes through, in bands.
+        let tall = vec![0u8; 72 * 40_000];
+        assert!(raster_job(&Raster { width: 576, height: 40_000, bits: &tall }, JobOptions::default()).is_ok());
     }
 }

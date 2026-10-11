@@ -4,7 +4,7 @@
 
 import { isDesktop } from '../platform';
 import type { Doc } from './doc';
-import { packBits, renderDoc, toBase64 } from './raster';
+import { rasterDoc, toBase64 } from './raster';
 
 export interface PrinterSettings {
   /** Windows printer name; null = use the print dialog. */
@@ -50,14 +50,12 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
  */
 export async function printDoc(doc: Doc, settings: PrinterSettings, options: { openDrawer?: boolean } = {}): Promise<void> {
   if (canPrintDirect(settings)) {
-    const canvas = await renderDoc(doc, settings.widthDots);
-    const pixels = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
-    const bits = packBits(pixels.data, canvas.width, canvas.height);
+    const image = await rasterDoc(doc, settings.widthDots);
     await invoke('print_raster', {
       printer: settings.name,
-      width: canvas.width,
-      height: canvas.height,
-      bitsBase64: toBase64(bits),
+      width: image.width,
+      height: image.height,
+      bitsBase64: toBase64(image.bits),
       cut: settings.cut,
       openDrawer: !!options.openDrawer,
     });

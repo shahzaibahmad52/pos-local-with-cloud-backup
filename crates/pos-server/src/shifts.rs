@@ -349,7 +349,7 @@ pub fn cash_move(conn: &Connection, auth: &Auth, user: &User, input: &CashMoveIn
         );
     }
     let shift_id = open_shift_id(conn, &input.till_code)?;
-    let approver = auth.approver(conn, input.approval.as_ref())?;
+    let approver = auth.approver(conn, user, input.approval.as_ref())?;
     if input.kind == "out" && rules::load(conn)?.cash_out && approver.is_none() && !user.is_admin() {
         return Err(AppError::ApprovalRequired("Taking cash out needs a manager PIN.".into())
             .because("approval.cash_out", json!({})));

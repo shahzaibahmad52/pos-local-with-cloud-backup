@@ -391,7 +391,8 @@ export function Till({
 
   /** Records the sale on this till, to be sent when the main PC is back. */
   const payOffline = () => {
-    if (!catalogue) return setError(t('offNoCopy'));
+    // A copy from before price lists were recorded can't be checked by the main PC.
+    if (!catalogue?.priceListId) return setError(t('offNoCopy'));
     if (method === 'khata') return setError(t('offNoKhata'));
     if (discountBp > catalogue.maxDiscountBp && user.role !== 'admin') {
       return setError(t('offDiscount', { max: catalogue.maxDiscountBp / 100 }));
@@ -410,6 +411,7 @@ export function Till({
       clientRef,
       customer: customer && { id: customer.id, name: customer.name },
       weightRoundTo: catalogue.weightRoundTo,
+      priceListId: catalogue.priceListId,
     });
     offlineStore.saveQueue([...offlineStore.queue(), sale]);
     setQueued(offlineStore.queue().length);

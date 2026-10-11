@@ -79,6 +79,7 @@ export function buildOfflineSale(args: {
   clientRef: string;
   customer: { id: string; name: string } | null;
   weightRoundTo: number;
+  priceListId: string;
 }): QueuedSale {
   const totals = cartTotals(args.lines, args.discountBp, args.weightRoundTo);
   const priced = args.lines.map((l) => priceLine(l, args.weightRoundTo));
@@ -96,6 +97,7 @@ export function buildOfflineSale(args: {
       receiptNo: args.receiptNo,
       createdAt: args.createdAt,
       lines: priced.map((p) => ({ unitPrice: p.unitPrice, lineTotal: p.total })),
+      priceListId: args.priceListId,
     },
   };
   const receipt: Receipt = {

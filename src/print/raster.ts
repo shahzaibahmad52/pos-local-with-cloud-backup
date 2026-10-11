@@ -79,9 +79,15 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, max: number): string[
   return lines;
 }
 
-/** Draws the document `width` dots wide (576 for 80 mm paper, 384 for 58 mm). */
-export async function renderDoc(doc: Doc, width: number): Promise<HTMLCanvasElement> {
-  await ensureFonts();
+/** Tallest canvas drawn in one go; browsers refuse very tall canvases. */
+const PAGE = 8_000;
+
+/**
+ * Draws the whole document onto `ctx`, `width` dots wide, and returns its
+ * height. Anything outside the canvas is simply not drawn, so the same call
+ * measures (on a 1-dot canvas) and draws one page at a time (shifted up).
+ */
+function drawDoc(ctx: CanvasRenderingContext2D, doc: Doc, width: number): number {
   const scale = width / 576;
   const size = Math.round(22 * scale);
   const small = Math.round(18 * scale);
@@ -92,12 +98,6 @@ export async function renderDoc(doc: Doc, width: number): Promise<HTMLCanvasElem
   const family = (ltr?: boolean) => (ltr || !rtl ? `${MONO}, ${URDU}, monospace` : `${URDU}, ${MONO}, serif`);
   const lineHeight = (px: number) => Math.round(px * (doc.urdu ? 1.95 : 1.4));
 
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = 12_000;
-  const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = '#000';
   ctx.strokeStyle = '#000';
   ctx.textBaseline = 'alphabetic';
@@ -173,11 +173,44 @@ export async function renderDoc(doc: Doc, width: number): Promise<HTMLCanvasElem
     }
   };
   for (const block of doc.blocks) draw(block);
+  return y + Math.round(24 * scale);
+}
 
-  const height = Math.min(canvas.height, y + Math.round(24 * scale));
-  const out = document.createElement('canvas');
-  out.width = width;
-  out.height = height;
-  out.getContext('2d')!.drawImage(canvas, 0, 0);
-  return out;
+function measure(doc: Doc, width: number): number {
+  const probe = document.createElement('canvas');
+  probe.width = width;
+  probe.height = 1;
+  return drawDoc(probe.getContext('2d')!, doc, width);
+}
+
+function page(doc: Doc, width: number, top: number, height: number): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, width, height);
+  ctx.translate(0, -top);
+  drawDoc(ctx, doc, width);
+  return canvas;
+}
+
+/** Draws the document `width` dots wide (576 for 80 mm paper, 384 for 58 mm) on one canvas, for previews. */
+export async function renderDoc(doc: Doc, width: number): Promise<HTMLCanvasElement> {
+  await ensureFonts();
+  return page(doc, width, 0, Math.min(measure(doc, width), 30_000));
+}
+
+/** The printer image of a document of any length: drawn a page at a time and joined. */
+export async function rasterDoc(doc: Doc, width: number): Promise<{ width: number; height: number; bits: Uint8Array }> {
+  await ensureFonts();
+  const height = measure(doc, width);
+  const rowBytes = Math.ceil(width / 8);
+  const bits = new Uint8Array(rowBytes * height);
+  for (let top = 0; top < height; top += PAGE) {
+    const h = Math.min(PAGE, height - top);
+    const pixels = page(doc, width, top, h).getContext('2d')!.getImageData(0, 0, width, h);
+    bits.set(packBits(pixels.data, width, h), top * rowBytes);
+  }
+  return { width, height, bits };
 }

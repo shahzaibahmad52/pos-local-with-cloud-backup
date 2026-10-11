@@ -481,10 +481,13 @@ pub fn update(conn: &mut Connection, user: &User, id: &str, input: &ProductUpdat
     if !matches!(input.kind.as_str(), "medicine" | "general") {
         return Err(AppError::BadRequest("Type must be medicine or general.".into()));
     }
-    if !(0..=10_000).contains(&input.tax_rate_bp) || input.reorder_level < 0 {
+    if !(0..=10_000).contains(&input.tax_rate_bp) || !(0..=crate::pricing::MAX_QTY).contains(&input.reorder_level) {
         return Err(AppError::BadRequest("Check the sales tax and reorder level.".into()));
     }
     let tx = conn.transaction()?;
+    if input.active {
+        products::ensure_name_free(&tx, name, Some(id))?;
+    }
     let sell_mode: String = tx
         .query_row("SELECT sell_mode FROM products WHERE id = ?1", [id], |r| r.get(0))
         .optional()?
@@ -633,14 +636,20 @@ pub fn update(conn: &mut Connection, user: &User, id: &str, input: &ProductUpdat
             return Err(AppError::Conflict(format!("Barcode {code} is already used by {other}."))
                 .because("barcode.taken", json!({ "code": code, "product": other })));
         }
-        let unit_id: Option<String> = match &b.unit_name {
-            Some(n) => tx
-                .query_row(
+        let unit_id: Option<String> = match b.unit_name.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
+            Some(n) => Some(
+                tx.query_row(
                     "SELECT id FROM product_units WHERE product_id = ?1 AND name = ?2 COLLATE NOCASE",
-                    params![id, n.trim()],
+                    params![id, n],
                     |r| r.get(0),
                 )
-                .optional()?,
+                .optional()?
+                .ok_or_else(|| {
+                    AppError::BadRequest(format!(
+                        "Barcode {code} is for pack \"{n}\", which this product doesn't have."
+                    ))
+                })?,
+            ),
             None => None,
         };
         tx.execute("INSERT INTO barcodes (code, product_id, unit_id) VALUES (?1, ?2, ?3)", params![code, id, unit_id])?;

@@ -238,6 +238,22 @@ fn default_sell_mode() -> String {
     "unit".into()
 }
 
+/// Two products on sale with the same name would be mixed up by search, import and transfers.
+pub fn ensure_name_free(conn: &Connection, name: &str, except_id: Option<&str>) -> AppResult<()> {
+    let other: Option<String> = conn
+        .query_row(
+            "SELECT name FROM products WHERE name = ?1 COLLATE NOCASE AND active = 1 AND id IS NOT ?2",
+            params![name.trim(), except_id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    match other {
+        Some(n) => Err(AppError::Conflict(format!("A product called \"{n}\" already exists."))
+            .because("product.name_taken", json!({ "name": n }))),
+        None => Ok(()),
+    }
+}
+
 pub fn create_product(conn: &mut Connection, input: &NewProduct, user_id: &str) -> AppResult<ProductView> {
     let tx = conn.transaction()?;
     let id = insert_product(&tx, input, user_id)?;
@@ -257,12 +273,25 @@ pub fn insert_product(tx: &Connection, input: &NewProduct, user_id: &str) -> App
     if !(0..=10_000).contains(&input.tax_rate_bp) {
         return Err(AppError::BadRequest("Tax rate must be between 0% and 100%.".into()));
     }
+    if !(0..=crate::pricing::MAX_QTY).contains(&input.reorder_level) {
+        return Err(AppError::BadRequest("Check the sales tax and reorder level.".into()));
+    }
+    ensure_name_free(tx, name, None)?;
     match input.sell_mode.as_str() {
         "unit" => {
             if input.units.is_empty() {
                 return Err(AppError::BadRequest("Add at least one pack size (e.g. Tab or Strip).".into()));
             }
+            if input.base_unit.trim().is_empty() {
+                return Err(AppError::BadRequest("Name the smallest unit (Tab, Cap, Pc…).".into()));
+            }
+            let mut names: Vec<String> = Vec::new();
             for u in &input.units {
+                let n = u.name.trim().to_lowercase();
+                if names.contains(&n) {
+                    return Err(AppError::BadRequest(format!("Pack size \"{}\" is listed twice.", u.name.trim())));
+                }
+                names.push(n);
                 if u.name.trim().is_empty()
                     || u.base_qty <= 0
                     || u.price < 0
@@ -325,12 +354,20 @@ pub fn insert_product(tx: &Connection, input: &NewProduct, user_id: &str) -> App
         if code.is_empty() {
             continue;
         }
-        let unit_id: Option<String> = match &b.unit_name {
-            Some(n) => tx
-                .query_row("SELECT id FROM product_units WHERE product_id = ?1 AND name = ?2", params![id, n], |r| {
-                    r.get(0)
-                })
-                .optional()?,
+        let unit_id: Option<String> = match b.unit_name.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
+            Some(n) => Some(
+                tx.query_row(
+                    "SELECT id FROM product_units WHERE product_id = ?1 AND name = ?2 COLLATE NOCASE",
+                    params![id, n],
+                    |r| r.get(0),
+                )
+                .optional()?
+                .ok_or_else(|| {
+                    AppError::BadRequest(format!(
+                        "Barcode {code} is for pack \"{n}\", which this product doesn't have."
+                    ))
+                })?,
+            ),
             None => None,
         };
         let taken: Option<String> =
@@ -489,7 +526,80 @@ pub struct Catalogue {
     /// The highest offline receipt number this till has sent in, so a till
     /// whose local counter was wiped doesn't reuse a number.
     pub last_offline_no: i64,
+    /// Which recorded price list this is; offline sales name it.
+    pub price_list_id: String,
     pub generated_at: String,
+}
+
+/// One product's prices as handed to a till: per pack, or per kg.
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct ListedPrices {
+    #[serde(rename = "u", default)]
+    pub units: std::collections::BTreeMap<String, i64>,
+    #[serde(rename = "kg", default)]
+    pub per_kg: Option<i64>,
+}
+
+/// A price list recorded when a till downloaded its product list.
+pub struct PriceList {
+    pub created_at: String,
+    pub prices: std::collections::BTreeMap<String, ListedPrices>,
+    pub max_discount_bp: i64,
+    pub weight_round_to: i64,
+}
+
+/// Records the prices in `products` (unless the latest list is the same) and returns the list's id.
+fn record_price_list(
+    conn: &Connection,
+    products: &[ProductView],
+    max_discount_bp: i64,
+    round_to: i64,
+) -> AppResult<String> {
+    let prices: std::collections::BTreeMap<&str, ListedPrices> = products
+        .iter()
+        .map(|p| {
+            let listed = ListedPrices {
+                units: p.units.iter().map(|u| (u.id.clone(), u.price)).collect(),
+                per_kg: p.price_per_kg.filter(|_| p.sell_mode == "weight"),
+            };
+            (p.id.as_str(), listed)
+        })
+        .collect();
+    let text = serde_json::to_string(&prices).map_err(|e| AppError::Internal(e.to_string()))?;
+    let latest: Option<String> = conn
+        .query_row(
+            "SELECT id FROM offline_price_lists WHERE prices = ?1 AND max_discount_bp = ?2 AND weight_round_to = ?3
+             ORDER BY created_at DESC LIMIT 1",
+            params![text, max_discount_bp, round_to],
+            |r| r.get(0),
+        )
+        .optional()?;
+    if let Some(id) = latest {
+        return Ok(id);
+    }
+    let id = db::new_id();
+    conn.execute(
+        "INSERT INTO offline_price_lists (id, created_at, prices, max_discount_bp, weight_round_to) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![id, db::now(), text, max_discount_bp, round_to],
+    )?;
+    // Offline sales older than a week are refused anyway.
+    let cutoff =
+        (chrono::Local::now() - chrono::Duration::days(30)).to_rfc3339_opts(chrono::SecondsFormat::Secs, false);
+    conn.execute("DELETE FROM offline_price_lists WHERE created_at < ?1", [cutoff])?;
+    Ok(id)
+}
+
+pub fn price_list(conn: &Connection, id: &str) -> AppResult<Option<PriceList>> {
+    let row: Option<(String, String, i64, i64)> = conn
+        .query_row(
+            "SELECT created_at, prices, max_discount_bp, weight_round_to FROM offline_price_lists WHERE id = ?1",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .optional()?;
+    let Some((created_at, text, max_discount_bp, weight_round_to)) = row else { return Ok(None) };
+    let prices = serde_json::from_str(&text).map_err(|e| AppError::Internal(e.to_string()))?;
+    Ok(Some(PriceList { created_at, prices, max_discount_bp, weight_round_to }))
 }
 
 pub fn catalogue(conn: &Connection, till_code: &str) -> AppResult<Catalogue> {
@@ -507,12 +617,16 @@ pub fn catalogue(conn: &Connection, till_code: &str) -> AppResult<Catalogue> {
         .prepare("SELECT b.code, b.product_id, b.unit_id FROM barcodes b JOIN products p ON p.id = b.product_id WHERE p.active = 1")?
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
         .collect::<Result<_, _>>()?;
+    let max_discount_bp = db::setting_i64(conn, "cashier_max_discount_bp", 500)?;
+    let weight_round_to = db::setting_i64(conn, "weight_round_to_paisa", 100)?;
+    let price_list_id = record_price_list(conn, &products, max_discount_bp, weight_round_to)?;
     Ok(Catalogue {
         store: crate::sales::store_header(conn)?,
+        price_list_id,
         products,
         barcodes,
-        max_discount_bp: db::setting_i64(conn, "cashier_max_discount_bp", 500)?,
-        weight_round_to: db::setting_i64(conn, "weight_round_to_paisa", 100)?,
+        max_discount_bp,
+        weight_round_to,
         last_offline_no: last_offline_no(conn, till_code)?,
         generated_at: db::now(),
     })

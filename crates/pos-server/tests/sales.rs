@@ -281,7 +281,12 @@ fn an_hour_ago() -> String {
     (chrono::Local::now() - chrono::Duration::hours(1)).to_rfc3339_opts(chrono::SecondsFormat::Secs, false)
 }
 
-fn offline_sale(no: &str, lines: Vec<(SaleLineInput, i64, i64)>, paid: i64) -> SaleInput {
+/// The till's copy of the product list, as it would have downloaded it.
+fn price_list(conn: &Connection) -> String {
+    products::catalogue(conn, "T02").unwrap().price_list_id
+}
+
+fn offline_sale(list: &str, no: &str, lines: Vec<(SaleLineInput, i64, i64)>, paid: i64) -> SaleInput {
     SaleInput {
         till_code: "T02".into(),
         customer_id: None,
@@ -294,6 +299,7 @@ fn offline_sale(no: &str, lines: Vec<(SaleLineInput, i64, i64)>, paid: i64) -> S
             receipt_no: no.into(),
             created_at: an_hour_ago(),
             lines: lines.iter().map(|l| sales::OfflineLine { unit_price: l.1, line_total: l.2 }).collect(),
+            price_list_id: Some(list.into()),
         }),
     }
 }
@@ -303,11 +309,14 @@ fn offline_sales_are_recorded_as_they_happened() {
     let mut conn = store();
     let ali = user(&conn, "Ali");
     let aug = product(&conn, "Augmentin");
-    // The till sold 15 strips at last week's price while the network was down; only 14 are on record.
-    let input = offline_sale("B1-T02-X000001", vec![(units_line(&aug, "Strip", 15), 40_000, 600_000)], 600_000);
+    let list = price_list(&conn);
+    // The strip price went up after the till took its copy.
+    conn.execute("UPDATE product_units SET price = 45_000 WHERE id = ?1", [unit_id(&aug, "Strip")]).unwrap();
+    // The till sold 15 strips at its copy's Rs 420 while the network was down; only 14 are on record.
+    let input = offline_sale(&list, "B1-T02-X000001", vec![(units_line(&aug, "Strip", 15), 42_000, 630_000)], 630_000);
     let r = sales::create_sale(&mut conn, &Auth::default(), &ali, &input).unwrap();
     assert_eq!(r.receipt_no, "B1-T02-X000001");
-    assert_eq!(r.total, 600_000);
+    assert_eq!(r.total, 630_000);
     assert_eq!(r.created_at, input.offline.as_ref().unwrap().created_at);
     assert_eq!(batch_qty(&conn, "AG-118"), -6, "the shortfall shows up for the next count");
     let (action, details): (String, String) = conn
@@ -323,8 +332,35 @@ fn offline_sales_are_recorded_as_they_happened() {
     assert_eq!(again.id, r.id);
 
     // Another till's number, or khata, is refused.
-    let bad = offline_sale("B1-T09-X000001", vec![(units_line(&aug, "Tab", 1), 7_000, 7_000)], 7_000);
+    let bad = offline_sale(&list, "B1-T09-X000001", vec![(units_line(&aug, "Tab", 1), 7_000, 7_000)], 7_000);
     assert!(sales::create_sale(&mut conn, &Auth::default(), &ali, &bad).is_err());
+}
+
+#[test]
+fn offline_prices_and_discounts_must_come_from_the_tills_list() {
+    let mut conn = store();
+    let ali = user(&conn, "Ali");
+    let aug = product(&conn, "Augmentin");
+    let list = price_list(&conn);
+    let refused = |conn: &mut Connection, input: &SaleInput| {
+        sales::create_sale(conn, &Auth::default(), &ali, input).unwrap_err().reason().map(str::to_string)
+    };
+    // A price the till was never given.
+    let cheap = offline_sale(&list, "B1-T02-X000001", vec![(units_line(&aug, "Strip", 1), 100, 100)], 100);
+    assert_eq!(refused(&mut conn, &cheap).as_deref(), Some("offline.price"));
+    // No list, or a made-up one.
+    let mut none = offline_sale(&list, "B1-T02-X000002", vec![(units_line(&aug, "Strip", 1), 42_000, 42_000)], 42_000);
+    none.offline.as_mut().unwrap().price_list_id = None;
+    assert_eq!(refused(&mut conn, &none).as_deref(), Some("offline.price"));
+    none.offline.as_mut().unwrap().price_list_id = Some("made-up".into());
+    assert_eq!(refused(&mut conn, &none).as_deref(), Some("offline.price"));
+    // A discount above the cashier limit (5%) the list was issued with.
+    let mut big = offline_sale(&list, "B1-T02-X000003", vec![(units_line(&aug, "Strip", 1), 42_000, 42_000)], 42_000);
+    big.discount_bp = 5_000;
+    assert_eq!(refused(&mut conn, &big).as_deref(), Some("offline.price"));
+    // The real thing goes through.
+    let fine = offline_sale(&list, "B1-T02-X000004", vec![(units_line(&aug, "Strip", 1), 42_000, 42_000)], 42_000);
+    sales::create_sale(&mut conn, &Auth::default(), &ali, &fine).unwrap();
 }
 
 #[test]
@@ -338,7 +374,8 @@ fn the_catalogue_carries_everything_an_offline_till_needs() {
     assert_eq!(cat.last_offline_no, 0);
 
     let aug = product(&conn, "Augmentin");
-    let input = offline_sale("B1-T02-X000041", vec![(units_line(&aug, "Tab", 1), 7_000, 7_000)], 7_000);
+    let input =
+        offline_sale(&cat.price_list_id, "B1-T02-X000041", vec![(units_line(&aug, "Tab", 1), 7_000, 7_000)], 7_000);
     sales::create_sale(&mut conn, &Auth::default(), &ali, &input).unwrap();
     assert_eq!(products::catalogue(&conn, "T02").unwrap().last_offline_no, 41);
     assert_eq!(products::catalogue(&conn, "T01").unwrap().last_offline_no, 0);

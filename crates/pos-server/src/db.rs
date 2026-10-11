@@ -11,6 +11,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/004_cloud_sync.sql"),
     include_str!("../migrations/005_counts_transfers.sql"),
     include_str!("../migrations/006_fbr.sql"),
+    include_str!("../migrations/007_offline_price_lists.sql"),
 ];
 
 /// How many migrations this version of the app has (the schema version).

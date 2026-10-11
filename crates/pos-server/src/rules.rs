@@ -96,7 +96,7 @@ pub fn record_action(conn: &Connection, auth: &Auth, user: &User, input: &Action
         "no_sale_drawer" => rules.no_sale_drawer,
         _ => false,
     };
-    let approver = auth.approver(conn, input.approval.as_ref())?;
+    let approver = auth.approver(conn, user, input.approval.as_ref())?;
     if needs_pin && approver.is_none() && !user.is_admin() {
         return Err(AppError::ApprovalRequired("A manager PIN is needed for this.".into())
             .because("approval.action", json!({ "action": input.action })));

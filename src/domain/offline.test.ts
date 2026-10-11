@@ -49,6 +49,7 @@ const cat: Catalogue = {
   barcodes: [['8964000123463', 'p1', 'p1-strip']],
   maxDiscountBp: 500,
   weightRoundTo: 100,
+  priceListId: 'list-1',
   lastOfflineNo: 0,
   generatedAt: '2026-10-11T09:00:00+05:00',
 };
@@ -89,6 +90,7 @@ describe('offline till', () => {
       clientRef: 'ref-1',
       customer: null,
       weightRoundTo: 100,
+      priceListId: 'list-1',
     });
     expect(sale.input.offline?.lines).toEqual([
       { unitPrice: 3_000, lineTotal: 6_000 },

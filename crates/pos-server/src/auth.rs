@@ -124,6 +124,19 @@ impl Auth {
     /// Checks `secret` against `hash` under the lockout for `key` (a user id,
     /// or a name for codes that belong to no user).
     pub fn check_code(&self, conn: &Connection, key: &str, hash: Option<&str>, secret: &str) -> AppResult<()> {
+        let who = load_user(conn, key)?.map(|u| u.id);
+        self.check_under(conn, key, who.as_deref(), hash, secret)
+    }
+
+    /// The lockout itself. `who` is the user the lockout is logged against.
+    fn check_under(
+        &self,
+        conn: &Connection,
+        key: &str,
+        who: Option<&str>,
+        hash: Option<&str>,
+        secret: &str,
+    ) -> AppResult<()> {
         {
             let attempts = self.attempts.lock().map_err(poisoned)?;
             if let Some(Attempts { locked_until: Some(until), .. }) = attempts.get(key) {
@@ -147,12 +160,11 @@ impl Auth {
         if entry.failures >= MAX_FAILED_ATTEMPTS {
             entry.failures = 0;
             entry.locked_until = Some(Instant::now() + LOCKOUT);
-            let user = load_user(conn, key)?.map(|u| u.id);
-            let details = match user {
+            let details = match who {
                 Some(_) => json!({ "minutes": 5 }),
                 None => json!({ "minutes": 5, "what": key }),
             };
-            crate::db::audit(conn, user.as_deref(), None, "auth.locked", &details, None)?;
+            crate::db::audit(conn, who, None, "auth.locked", &details, None)?;
             return Err(AppError::Locked("Too many wrong tries. Locked for 5 minutes.".into())
                 .because("auth.locked", json!({ "minutes": 5 })));
         }
@@ -160,9 +172,16 @@ impl Auth {
     }
 
     /// Checks a manager approval, if one was given. Returns the approver.
-    pub fn approver(&self, conn: &Connection, approval: Option<&Approval>) -> AppResult<Option<User>> {
+    ///
+    /// Wrong tries are counted per asking user and manager, apart from the
+    /// manager's own sign-in: a cashier guessing is stopped after a few tries,
+    /// but can't lock the manager out of the till.
+    pub fn approver(&self, conn: &Connection, asked_by: &User, approval: Option<&Approval>) -> AppResult<Option<User>> {
         let Some(a) = approval else { return Ok(None) };
-        let approver = self.check_secret(conn, &a.user_id, &a.secret)?;
+        let hash = load_secret_hash(conn, &a.user_id)?;
+        let key = format!("approve:{}:{}", asked_by.id, a.user_id);
+        self.check_under(conn, &key, Some(&asked_by.id), hash.as_deref(), &a.secret)?;
+        let approver = load_user(conn, &a.user_id)?.ok_or(AppError::Unauthorized)?;
         if !approver.may_approve() {
             return Err(AppError::Forbidden(format!("{} can't approve this.", approver.name))
                 .because("approval.not_allowed", json!({ "name": approver.name })));

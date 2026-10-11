@@ -21,6 +21,7 @@ UI design (all screens): https://claude.ai/artifact/DdLH1Rp4aDxSGTM2m2EKUz
   - Each extra till keeps a copy of the product list, refreshed every 5 minutes.
   - If the main PC can't be reached, the till says so and keeps selling from that copy with cash, card or wallets. Khata and PIN-protected actions wait for the main PC. Receipts get the till's own "X" numbers, e.g. `B1-T02-X000001`.
   - The sales are sent across as soon as the main PC answers. The main PC records them as they happened (the till's prices and time), even if stock ran short. Anything unusual is flagged in the activity log.
+  - Each product list a till downloads is recorded on the main PC. An offline sale must match one of them exactly, prices and discount limit included, so offline mode can't be used to sell cheaper.
   - The shift can't be closed until every offline sale has been sent.
 - **FBR invoice reporting** (optional, Settings › FBR invoice reporting; off by default):
   - For Tier-1 retailers. Enter the POS ID and token FBR issues, choose sandbox or live, and switch it on.

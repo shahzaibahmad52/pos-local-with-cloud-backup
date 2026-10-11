@@ -276,7 +276,7 @@ pub fn create_return(conn: &mut Connection, auth: &Auth, user: &User, input: &Re
             return return_slip(conn, &id)?.ok_or_else(|| AppError::Internal("return vanished".into()));
         }
     }
-    let approver = auth.approver(conn, input.approval.as_ref())?;
+    let approver = auth.approver(conn, user, input.approval.as_ref())?;
     let approved = user.is_admin() || approver.is_some();
     let rules = rules::load(conn)?;
     let store_code = sales::store_code(conn)?;

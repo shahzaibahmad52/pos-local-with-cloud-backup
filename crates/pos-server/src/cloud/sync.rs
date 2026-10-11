@@ -26,7 +26,7 @@ use crate::{
 /// the FBR token (anyone with a read-only head-office token could read it).
 const PRIVATE_SETTINGS: &[&str] = &["cloud\\_%", "hq\\_%", "fbr\\_token"];
 /// Tables that exist only on this PC.
-const LOCAL_TABLES: &[&str] = &["sync_queue", "sqlite_sequence"];
+const LOCAL_TABLES: &[&str] = &["sync_queue", "sqlite_sequence", "offline_price_lists"];
 /// Rows per upload. Each becomes one statement in a single transaction.
 pub const BATCH: i64 = 400;
 

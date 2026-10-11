@@ -5,7 +5,7 @@ mod common;
 use pos_server::{
     auth::{self, Auth, User},
     counts::{self, LineInput, StartInput},
-    db, inventory, products, returns, sales, seed, shifts, store,
+    db, inventory, products, returns, rules, sales, seed, shifts, store,
 };
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -168,9 +168,11 @@ fn offline_sales_must_look_like_a_real_tills() {
     let mut conn = demo();
     let p = panadol(&conn);
     let now = chrono::Local::now();
+    let list = products::catalogue(&conn, "T01").unwrap().price_list_id;
     let offline = |no: &str, at: chrono::DateTime<chrono::Local>, price: i64, total: i64| {
         json!({ "clientRef": format!("r-{no}-{total}-{}", at.timestamp()), "offline": {
-            "receiptNo": no, "createdAt": at.to_rfc3339(), "lines": [{ "unitPrice": price, "lineTotal": total }] } })
+            "receiptNo": no, "createdAt": at.to_rfc3339(), "priceListId": list,
+            "lines": [{ "unitPrice": price, "lineTotal": total }] } })
     };
     let pay = json!([{ "method": "cash", "amount": 6_000 }]);
     let hour_ago = now - chrono::Duration::hours(1);
@@ -229,4 +231,59 @@ fn a_bigger_pack_drops_the_old_batch_price() {
         "rack": p.rack, "units": units }));
     inventory::update(&mut conn, &owner, &p.id, &update).unwrap();
     assert_eq!(panadol(&conn).units.iter().find(|u| u.name == "Strip").unwrap().price, 3_600);
+}
+
+#[test]
+fn a_cashier_guessing_a_managers_pin_cant_lock_the_manager_out() {
+    let conn = demo();
+    let auth = Auth::default();
+    let ali = user(&conn, "Ali");
+    let usman = user(&conn, "Usman");
+    let sana = user(&conn, "Sana");
+    let action = |pin: &str| -> rules::ActionInput {
+        input(json!({ "action": "cancel_bill", "tillCode": "T01", "approval": { "userId": sana.id, "secret": pin } }))
+    };
+    for _ in 0..5 {
+        let _ = rules::record_action(&conn, &auth, &ali, &action("0000"));
+    }
+    // Ali is stopped from trying Sana's PIN for a while…
+    assert_eq!(rules::record_action(&conn, &auth, &ali, &action("2345")).unwrap_err().reason(), Some("auth.locked"));
+    // …but Sana can still sign in, and approve for Usman.
+    auth.check_secret(&conn, &sana.id, "2345").unwrap();
+    rules::record_action(&conn, &auth, &usman, &action("2345")).unwrap();
+}
+
+#[test]
+fn adding_a_product_is_checked_like_editing_one() {
+    let mut conn = demo();
+    let owner = user(&conn, "Owner");
+    let new = |name: &str, base: &str, units: Value, reorder: i64, barcodes: Value| -> products::NewProduct {
+        input(json!({ "name": name, "kind": "general", "baseUnit": base, "units": units,
+                      "reorderLevel": reorder, "barcodes": barcodes }))
+    };
+    let pc = json!([{ "name": "Pc", "baseQty": 1, "price": 5_000 }]);
+    let err =
+        |p: products::NewProduct, conn: &mut Connection| products::create_product(conn, &p, &owner.id).unwrap_err();
+    assert_eq!(
+        err(new("panadol 500MG tablet", "Pc", pc.clone(), 0, json!([])), &mut conn).reason(),
+        Some("product.name_taken")
+    );
+    assert_eq!(err(new("Comb", "", pc.clone(), 0, json!([])), &mut conn).code(), "bad_request");
+    assert_eq!(err(new("Comb", "Pc", pc.clone(), -1, json!([])), &mut conn).code(), "bad_request");
+    let twice = json!([{ "name": "Pc", "baseQty": 1, "price": 5_000 }, { "name": "pc", "baseQty": 2, "price": 9_000 }]);
+    assert_eq!(err(new("Comb", "Pc", twice, 0, json!([])), &mut conn).code(), "bad_request");
+    let wrong_pack = json!([{ "code": "1234567890123", "unitName": "Dozen" }]);
+    assert_eq!(err(new("Comb", "Pc", pc.clone(), 0, wrong_pack), &mut conn).code(), "bad_request");
+    products::create_product(&mut conn, &new("Comb", "Pc", pc, 0, json!([])), &owner.id).unwrap();
+
+    // Renaming another product to the same name is refused too.
+    let p = panadol(&conn);
+    let units: Vec<Value> = p
+        .units
+        .iter()
+        .map(|u| json!({ "id": u.id, "name": u.name, "baseQty": u.base_qty, "price": u.price }))
+        .collect();
+    let rename: inventory::ProductUpdate =
+        input(json!({ "name": "COMB", "kind": "medicine", "baseUnit": p.base_unit, "units": units }));
+    assert_eq!(inventory::update(&mut conn, &owner, &p.id, &rename).unwrap_err().reason(), Some("product.name_taken"));
 }

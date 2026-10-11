@@ -65,6 +65,9 @@ pub struct OfflineSale {
     pub created_at: String,
     /// The price the till charged for each line, in the same order.
     pub lines: Vec<OfflineLine>,
+    /// The price list (from the till's copy of the product list) it sold at.
+    #[serde(default)]
+    pub price_list_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -72,6 +75,46 @@ pub struct OfflineSale {
 pub struct OfflineLine {
     pub unit_price: i64,
     pub line_total: i64,
+}
+
+/// An offline sale must be priced exactly from a product list this PC gave a
+/// till in the last week, within that list's cashier discount. So a request
+/// made by hand can't set its own prices or discount; only stock can run
+/// short, which is flagged.
+fn check_offline_prices(conn: &Connection, user: &User, input: &SaleInput, o: &OfflineSale) -> AppResult<()> {
+    let refuse = || {
+        AppError::BadRequest("The offline sale's prices aren't from this till's product list.".into())
+            .because("offline.price", json!({}))
+    };
+    let list = match o.price_list_id.as_deref() {
+        Some(id) => products::price_list(conn, id)?.ok_or_else(refuse)?,
+        None => return Err(refuse()),
+    };
+    let issued = chrono::DateTime::parse_from_rfc3339(&list.created_at).map_err(|_| refuse())?;
+    if chrono::Local::now().signed_duration_since(issued) > chrono::Duration::days(8) {
+        return Err(refuse());
+    }
+    if input.discount_bp > list.max_discount_bp && !user.is_admin() {
+        return Err(refuse());
+    }
+    for (l, ol) in input.lines.iter().zip(&o.lines) {
+        let listed = list.prices.get(&l.product_id).ok_or_else(refuse)?;
+        let ok = match (&l.unit_id, listed.per_kg) {
+            (Some(unit), _) if l.grams.is_none() && l.amount.is_none() => {
+                listed.units.get(unit) == Some(&ol.unit_price)
+            }
+            (None, Some(per_kg)) if ol.unit_price == per_kg => match (l.grams, l.amount) {
+                (Some(g), _) if g > 0 => ol.line_total == pricing::amount_for_grams(g, per_kg, list.weight_round_to),
+                (_, Some(a)) if a > 0 => ol.line_total == a,
+                _ => false,
+            },
+            _ => false,
+        };
+        if !ok {
+            return Err(refuse());
+        }
+    }
+    Ok(())
 }
 
 /// Valid offline receipt number for this store and till.
@@ -410,13 +453,14 @@ pub fn create_sale(conn: &mut Connection, auth: &Auth, user: &User, input: &Sale
         if !adds_up {
             return Err(AppError::BadRequest("The offline sale's prices don't add up.".into()));
         }
+        check_offline_prices(conn, user, input, o)?;
         if input.payments.iter().any(|p| p.method == "khata") {
             return Err(AppError::BadRequest("Khata isn't allowed for offline sales.".into()));
         }
     }
 
     // Manager approval is checked once, up front, and only if supplied.
-    let approver = auth.approver(conn, input.approval.as_ref())?;
+    let approver = auth.approver(conn, user, input.approval.as_ref())?;
     let approved = user.is_admin() || approver.is_some();
 
     let max_discount = db::setting_i64(conn, "cashier_max_discount_bp", 500)?;

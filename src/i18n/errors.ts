@@ -42,6 +42,7 @@ const UR: Record<string, (p: Params) => string> = {
   'drawer.short': () => 'دراز میں اتنی نقد رقم نہیں ہے۔',
   'till.bad_code': () => 'ٹل کوڈ صرف بڑے انگریزی حروف اور ہندسے ہوتا ہے، جیسے T01۔',
   'return.khata_sale': () => 'یہ سیل کھاتے پر تھی، اس لیے ریفنڈ کھاتے میں ہی جائے گا۔',
+  'offline.price': () => 'آف لائن سیل کی قیمتیں اس ٹل کی پروڈکٹ لسٹ سے نہیں ملتیں۔',
   'offline.time': () => 'آف لائن سیل کا وقت درست نہیں۔ ٹل کی گھڑی چیک کریں۔',
   'transfer.expired': (p) => `${s(p.product)} بیچ ${s(p.batch)} کی میعاد ختم ہو چکی ہے، اسے بھیجا نہیں جا سکتا۔`,
   'cash.reason_required': () => 'لکھیں کہ نقد کس لیے ہے۔',
@@ -78,6 +79,7 @@ const UR: Record<string, (p: Params) => string> = {
   'transfer.wrong_store': (p) => `یہ منتقلی اسٹور ${s(p.to)} کے لیے ہے۔`,
   'transfer.received': () => 'وصول شدہ تعداد 0 اور بھیجی گئی تعداد کے درمیان ہونی چاہیے۔',
   'barcode.taken': (p) => `بارکوڈ ${s(p.code)} پہلے سے ${s(p.product)} پر ہے۔`,
+  'product.name_taken': (p) => `${s(p.name)} نام کی پروڈکٹ پہلے سے موجود ہے۔`,
 };
 
 const UR_BY_CODE: Record<string, string> = {

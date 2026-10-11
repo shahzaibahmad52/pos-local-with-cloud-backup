@@ -113,6 +113,8 @@ export interface SaleInput {
     receiptNo: string;
     createdAt: string;
     lines: { unitPrice: number; lineTotal: number }[];
+    /** The price list of the product list the till sold from. */
+    priceListId: string;
   };
 }
 
@@ -125,6 +127,8 @@ export interface Catalogue {
   maxDiscountBp: number;
   weightRoundTo: number;
   lastOfflineNo: number;
+  /** Offline sales name it, so the main PC can check their prices. */
+  priceListId: string;
   generatedAt: string;
 }
 
