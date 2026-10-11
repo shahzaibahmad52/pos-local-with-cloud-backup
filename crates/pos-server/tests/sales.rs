@@ -51,6 +51,7 @@ fn sale(lines: Vec<SaleLineInput>, payments: Vec<PaymentInput>) -> SaleInput {
         payments,
         client_ref: None,
         approval: None,
+        offline: None,
     }
 }
 
@@ -271,4 +272,67 @@ fn retrying_with_the_same_client_ref_does_not_double_sell() {
     assert_eq!(batch_qty(&conn, "BF-031"), 21);
     let outbox: i64 = conn.query_row("SELECT COUNT(*) FROM outbox WHERE entity = 'sale'", [], |r| r.get(0)).unwrap();
     assert_eq!(outbox, 1);
+}
+
+fn offline_sale(no: &str, lines: Vec<(SaleLineInput, i64, i64)>, paid: i64) -> SaleInput {
+    SaleInput {
+        till_code: "T02".into(),
+        customer_id: None,
+        lines: lines.iter().map(|l| l.0.clone()).collect(),
+        discount_bp: 0,
+        payments: vec![sales::PaymentInput { method: "cash".into(), amount: paid }],
+        client_ref: Some(format!("ref-{no}")),
+        approval: None,
+        offline: Some(sales::OfflineSale {
+            receipt_no: no.into(),
+            created_at: "2026-10-11T10:15:00+05:00".into(),
+            lines: lines.iter().map(|l| sales::OfflineLine { unit_price: l.1, line_total: l.2 }).collect(),
+        }),
+    }
+}
+
+#[test]
+fn offline_sales_are_recorded_as_they_happened() {
+    let mut conn = store();
+    let ali = user(&conn, "Ali");
+    let aug = product(&conn, "Augmentin");
+    // The till sold 15 strips at last week's price while the network was down; only 14 are on record.
+    let input = offline_sale("B1-T02-X000001", vec![(units_line(&aug, "Strip", 15), 40_000, 600_000)], 600_000);
+    let r = sales::create_sale(&mut conn, &Auth::default(), &ali, &input).unwrap();
+    assert_eq!(r.receipt_no, "B1-T02-X000001");
+    assert_eq!(r.total, 600_000);
+    assert_eq!(r.created_at, "2026-10-11T10:15:00+05:00");
+    assert_eq!(batch_qty(&conn, "AG-118"), -6, "the shortfall shows up for the next count");
+    let (action, details): (String, String) = conn
+        .query_row("SELECT action, details FROM audit_log WHERE action = 'sale.offline'", [], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .unwrap();
+    assert_eq!(action, "sale.offline");
+    assert!(details.contains("\"oversold\":1") && details.contains("\"priceDiffers\":true"), "{details}");
+
+    // Sending it again (the till retries) records it once.
+    let again = sales::create_sale(&mut conn, &Auth::default(), &ali, &input).unwrap();
+    assert_eq!(again.id, r.id);
+
+    // Another till's number, or khata, is refused.
+    let bad = offline_sale("B1-T09-X000001", vec![(units_line(&aug, "Tab", 1), 7_000, 7_000)], 7_000);
+    assert!(sales::create_sale(&mut conn, &Auth::default(), &ali, &bad).is_err());
+}
+
+#[test]
+fn the_catalogue_carries_everything_an_offline_till_needs() {
+    let mut conn = store();
+    let ali = user(&conn, "Ali");
+    let cat = products::catalogue(&conn, "T02").unwrap();
+    assert_eq!(cat.store.code, "B1");
+    assert!(cat.products.iter().any(|p| p.name.starts_with("Panadol")));
+    assert!(cat.barcodes.iter().any(|b| b.0 == "8964000123463"));
+    assert_eq!(cat.last_offline_no, 0);
+
+    let aug = product(&conn, "Augmentin");
+    let input = offline_sale("B1-T02-X000041", vec![(units_line(&aug, "Tab", 1), 7_000, 7_000)], 7_000);
+    sales::create_sale(&mut conn, &Auth::default(), &ali, &input).unwrap();
+    assert_eq!(products::catalogue(&conn, "T02").unwrap().last_offline_no, 41);
+    assert_eq!(products::catalogue(&conn, "T01").unwrap().last_offline_no, 0);
 }

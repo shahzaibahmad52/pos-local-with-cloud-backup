@@ -131,6 +131,12 @@ fn is_flagged(action: &str, details: &Value) -> bool {
     match action {
         "shift.close" => details.get("difference").and_then(Value::as_i64).is_some_and(|d| d != 0),
         "till.cancel_bill" | "till.no_sale_drawer" | "auth.locked" => true,
+        // Sold offline with less stock than recorded, a different price, or too big a discount.
+        "sale.offline" => {
+            details.get("oversold").and_then(Value::as_i64).is_some_and(|n| n > 0)
+                || details.get("priceDiffers") == Some(&Value::Bool(true))
+                || details.get("discountOverLimit") == Some(&Value::Bool(true))
+        }
         _ => false,
     }
 }

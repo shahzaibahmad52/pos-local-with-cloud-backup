@@ -76,6 +76,7 @@ fn sell_strip(conn: &mut Connection) {
             payments: vec![sales::PaymentInput { method: "cash".into(), amount: 3_000 }],
             client_ref: None,
             approval: None,
+            offline: None,
         },
     )
     .unwrap();

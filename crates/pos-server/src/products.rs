@@ -483,3 +483,53 @@ mod tests {
         assert!(!valid_month("2028-8"));
     }
 }
+
+/// Everything an extra till needs to keep selling if the shop network drops.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Catalogue {
+    pub store: crate::sales::StoreHeader,
+    pub products: Vec<ProductView>,
+    /// Barcode → (product id, pack id).
+    pub barcodes: Vec<(String, String, Option<String>)>,
+    pub max_discount_bp: i64,
+    pub weight_round_to: i64,
+    /// The highest offline receipt number this till has sent in, so a till
+    /// whose local counter was wiped doesn't reuse a number.
+    pub last_offline_no: i64,
+    pub generated_at: String,
+}
+
+pub fn catalogue(conn: &Connection, till_code: &str) -> AppResult<Catalogue> {
+    let ids: Vec<String> = conn
+        .prepare("SELECT id FROM products WHERE active = 1 ORDER BY name COLLATE NOCASE")?
+        .query_map([], |r| r.get(0))?
+        .collect::<Result<_, _>>()?;
+    let mut products = Vec::with_capacity(ids.len());
+    for id in ids {
+        if let Some(p) = product_view(conn, &id)? {
+            products.push(p);
+        }
+    }
+    let barcodes = conn
+        .prepare("SELECT b.code, b.product_id, b.unit_id FROM barcodes b JOIN products p ON p.id = b.product_id WHERE p.active = 1")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+        .collect::<Result<_, _>>()?;
+    Ok(Catalogue {
+        store: crate::sales::store_header(conn)?,
+        products,
+        barcodes,
+        max_discount_bp: db::setting_i64(conn, "cashier_max_discount_bp", 500)?,
+        weight_round_to: db::setting_i64(conn, "weight_round_to_paisa", 100)?,
+        last_offline_no: last_offline_no(conn, till_code)?,
+        generated_at: db::now(),
+    })
+}
+
+fn last_offline_no(conn: &Connection, till_code: &str) -> AppResult<i64> {
+    let nos: Vec<String> = conn
+        .prepare("SELECT receipt_no FROM sales WHERE till_code = ?1 AND receipt_no LIKE '%-X%'")?
+        .query_map([till_code], |r| r.get(0))?
+        .collect::<Result<_, _>>()?;
+    Ok(nos.iter().filter_map(|n| n.rsplit_once("-X").and_then(|(_, d)| d.parse::<i64>().ok())).max().unwrap_or(0))
+}

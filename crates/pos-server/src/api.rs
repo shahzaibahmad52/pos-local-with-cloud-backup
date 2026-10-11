@@ -211,6 +211,15 @@ async fn search_products(
     Ok(Json(json!(products::search(&conn, &q.q, 20)?)))
 }
 
+async fn catalogue(
+    State(s): State<AppState>,
+    _me: AuthUser,
+    Query(q): Query<TillQuery>,
+) -> AppResult<Json<products::Catalogue>> {
+    let conn = s.db()?;
+    Ok(Json(products::catalogue(&conn, &q.till_code)?))
+}
+
 async fn product_by_barcode(
     State(s): State<AppState>,
     _me: AuthUser,
@@ -950,6 +959,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/products/import", post(import_products))
         .route("/api/products/{id}", put(update_product))
         .route("/api/products/search", get(search_products))
+        .route("/api/catalogue", get(catalogue))
         .route("/api/products/barcode/{code}", get(product_by_barcode))
         .route("/api/stock/receive", post(receive_stock))
         .route("/api/stock/adjust", post(adjust_stock))

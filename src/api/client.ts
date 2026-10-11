@@ -1,5 +1,6 @@
 import type {
   ActivityEntry,
+  Catalogue,
   CloudPage,
   CountHead,
   CountView,
@@ -134,6 +135,7 @@ export const api = {
     request<Shift | null>('GET', `/api/shifts/current?tillCode=${encodeURIComponent(tillCode)}`),
   openShift: (tillCode: string, openingCash: number) =>
     request<Shift>('POST', '/api/shifts/open', { tillCode, openingCash }),
+  catalogue: (tillCode: string) => request<Catalogue>('GET', `/api/catalogue?tillCode=${encodeURIComponent(tillCode)}`),
   createSale: (input: SaleInput) => request<Receipt>('POST', '/api/sales', input),
   receipt: (id: string) => request<Receipt>('GET', `/api/sales/${encodeURIComponent(id)}/receipt`),
   customers: (q = '') => request<Customer[]>('GET', `/api/customers?q=${encodeURIComponent(q)}`),

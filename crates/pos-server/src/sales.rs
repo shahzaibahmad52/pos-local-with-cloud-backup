@@ -49,6 +49,35 @@ pub struct SaleInput {
     pub client_ref: Option<String>,
     /// Manager PIN, when the sale needs one (big discount, khata over limit).
     pub approval: Option<Approval>,
+    /// Set when an extra till made this sale while it couldn't reach the main
+    /// PC. The sale has already happened, so it is recorded as it was.
+    #[serde(default)]
+    pub offline: Option<OfflineSale>,
+}
+
+/// What an extra till decided on its own while the shop network was down.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OfflineSale {
+    /// Printed on the customer's receipt: `{store}-{till}-X000001`.
+    pub receipt_no: String,
+    /// When the sale was made (RFC 3339).
+    pub created_at: String,
+    /// The price the till charged for each line, in the same order.
+    pub lines: Vec<OfflineLine>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OfflineLine {
+    pub unit_price: i64,
+    pub line_total: i64,
+}
+
+/// Valid offline receipt number for this store and till.
+pub fn valid_offline_no(no: &str, store: &str, till: &str) -> bool {
+    no.strip_prefix(&format!("{store}-{till}-X"))
+        .is_some_and(|n| !n.is_empty() && n.len() <= 9 && n.chars().all(|c| c.is_ascii_digit()))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -116,6 +145,8 @@ struct PricedLine {
     base_qty: i64,
     unit_price: i64,
     line_total: i64,
+    /// What this PC would have charged; differs from `line_total` only for offline sales.
+    list_total: i64,
     tax: i64,
     allocations: Vec<(String, i64, i64)>, // batch id, base qty, cost
 }
@@ -129,6 +160,7 @@ fn allocate_fefo(
     product_name: &str,
     base_qty: i64,
     base_unit: &str,
+    allow_short: bool,
 ) -> AppResult<Vec<(String, i64, i64)>> {
     let month = db::current_month();
     let mut stmt = tx.prepare(
@@ -158,6 +190,29 @@ fn allocate_fefo(
         out.push((id, take, take * cost));
         left -= take;
     }
+    if left > 0 && allow_short {
+        // Sold while offline: what the shelf really had is fixed by a count later.
+        // The shortfall comes off the batch expiring soonest, or the newest one.
+        let fallback: Option<(String, i64)> = tx
+            .query_row(
+                "SELECT id, cost_per_base FROM batches WHERE product_id = ?1
+                 ORDER BY (expiry IS NULL OR expiry >= ?2) DESC, expiry IS NULL, expiry, received_at DESC LIMIT 1",
+                params![product_id, month],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        if let Some((id, cost)) = fallback {
+            *reserved.entry(id.clone()).or_default() += left;
+            match out.iter_mut().find(|o: &&mut (String, i64, i64)| o.0 == id) {
+                Some(o) => {
+                    o.1 += left;
+                    o.2 += left * cost;
+                }
+                None => out.push((id, left, left * cost)),
+            }
+        }
+        return Ok(out);
+    }
     if left > 0 {
         let available = base_qty - left;
         let expired: i64 = tx.query_row(
@@ -184,6 +239,7 @@ fn price_line(
     reserved: &mut HashMap<String, i64>,
     line: &SaleLineInput,
     weight_round_to: i64,
+    offline: Option<&OfflineLine>,
 ) -> AppResult<PricedLine> {
     let product: Option<(String, String, String, Option<i64>, i64)> = tx
         .query_row(
@@ -237,7 +293,13 @@ fn price_line(
         (Some(unit_id.to_string()), unit_name, qty, qty * per_unit, price, qty * price)
     };
 
-    let allocations = allocate_fefo(tx, reserved, &line.product_id, &name, base_qty, &base_unit)?;
+    let allocations = allocate_fefo(tx, reserved, &line.product_id, &name, base_qty, &base_unit, offline.is_some())?;
+    // An offline till charged what it had; that is what the customer paid.
+    let list_total = line_total;
+    let (unit_price, line_total) = match offline {
+        Some(o) => (o.unit_price, o.line_total),
+        None => (unit_price, line_total),
+    };
     Ok(PricedLine {
         product_id: line.product_id.clone(),
         unit_id,
@@ -246,6 +308,7 @@ fn price_line(
         base_qty,
         unit_price,
         line_total,
+        list_total,
         tax: pricing::included_tax(line_total, tax_rate_bp),
         allocations,
     })
@@ -300,12 +363,27 @@ pub fn create_sale(conn: &mut Connection, auth: &Auth, user: &User, input: &Sale
         }
     }
 
+    let store_code = store_code(conn)?;
+    let offline = input.offline.as_ref();
+    if let Some(o) = offline {
+        if !valid_offline_no(&o.receipt_no, &store_code, till_code) {
+            return Err(AppError::BadRequest("That offline receipt number isn't from this till.".into()));
+        }
+        if o.lines.len() != input.lines.len() || chrono::DateTime::parse_from_rfc3339(&o.created_at).is_err() {
+            return Err(AppError::BadRequest("The offline sale is incomplete.".into()));
+        }
+        if input.payments.iter().any(|p| p.method == "khata") {
+            return Err(AppError::BadRequest("Khata isn't allowed for offline sales.".into()));
+        }
+    }
+
     // Manager approval is checked once, up front, and only if supplied.
     let approver = auth.approver(conn, input.approval.as_ref())?;
     let approved = user.is_admin() || approver.is_some();
 
     let max_discount = db::setting_i64(conn, "cashier_max_discount_bp", 500)?;
-    if input.discount_bp > max_discount && !approved {
+    // An offline till enforced the limit itself; anything over it is flagged, not refused.
+    if input.discount_bp > max_discount && !approved && offline.is_none() {
         return Err(AppError::ApprovalRequired(format!(
             "A discount above {}% needs a manager PIN.",
             max_discount as f64 / 100.0
@@ -313,14 +391,27 @@ pub fn create_sale(conn: &mut Connection, auth: &Auth, user: &User, input: &Sale
         .because("approval.discount", json!({ "maxPercent": max_discount as f64 / 100.0 })));
     }
     let weight_round_to = db::setting_i64(conn, "weight_round_to_paisa", 100)?;
-    let store_code = store_code(conn)?;
 
     let tx = conn.transaction()?;
 
     let mut reserved = HashMap::new();
     let mut lines = Vec::with_capacity(input.lines.len());
-    for line in &input.lines {
-        lines.push(price_line(&tx, &mut reserved, line, weight_round_to)?);
+    let mut price_differs = false;
+    let mut oversold = Vec::new();
+    for (i, line) in input.lines.iter().enumerate() {
+        let off = offline.map(|o| &o.lines[i]);
+        if off.is_some() {
+            // Would this PC have had the stock? A shortfall is flagged, not refused.
+            let mut probe = reserved.clone();
+            if let Err(e) = price_line(&tx, &mut probe, line, weight_round_to, None) {
+                if e.code() == "insufficient_stock" {
+                    oversold.push(line.product_id.clone());
+                }
+            }
+        }
+        let priced = price_line(&tx, &mut reserved, line, weight_round_to, off)?;
+        price_differs |= priced.line_total != priced.list_total;
+        lines.push(priced);
     }
 
     let subtotal: i64 = lines.iter().map(|l| l.line_total).sum();
@@ -389,8 +480,19 @@ pub fn create_sale(conn: &mut Connection, auth: &Auth, user: &User, input: &Sale
         .optional()?;
 
     let sale_id = db::new_id();
-    let receipt_no = next_receipt_no(&tx, &store_code, till_code)?;
-    let now = db::now();
+    let (receipt_no, now) = match offline {
+        Some(o) => {
+            let taken: bool =
+                tx.query_row("SELECT EXISTS (SELECT 1 FROM sales WHERE receipt_no = ?1)", [&o.receipt_no], |r| {
+                    r.get(0)
+                })?;
+            if taken {
+                return Err(AppError::Conflict(format!("Receipt {} is already recorded.", o.receipt_no)));
+            }
+            (o.receipt_no.clone(), o.created_at.clone())
+        }
+        None => (next_receipt_no(&tx, &store_code, till_code)?, db::now()),
+    };
     tx.execute(
         "INSERT INTO sales (id, receipt_no, client_ref, shift_id, till_code, user_id, customer_id, created_at,
             subtotal, discount, tax_included, total, paid, change_due, approved_by)
@@ -470,6 +572,23 @@ pub fn create_sale(conn: &mut Connection, auth: &Auth, user: &User, input: &Sale
         )?;
     }
 
+    if offline.is_some() {
+        db::audit(
+            &tx,
+            Some(&user.id),
+            Some(till_code),
+            "sale.offline",
+            &json!({
+                "receiptNo": receipt_no,
+                "total": total,
+                "soldAt": now,
+                "oversold": oversold.len(),
+                "priceDiffers": price_differs,
+                "discountOverLimit": input.discount_bp > max_discount && !approved,
+            }),
+            None,
+        )?;
+    }
     if let Some(a) = &approver {
         db::audit(
             &tx,

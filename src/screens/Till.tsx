@@ -3,6 +3,7 @@ import { api, ApiError, setToken } from '../api/client';
 import type {
   ApprovalInput,
   ApprovalRules,
+  Catalogue,
   Customer,
   Language,
   PaymentMethod,
@@ -20,6 +21,16 @@ import { BrandMark, LanguageToggle, SearchIcon, TrashIcon } from '../components/
 import { PrinterSetup } from '../components/PrinterSetup';
 import { addToCart, baseQtyOnBill, cartTotals, priceLine, toSaleLines, type CartLine, type WeightLine } from '../domain/cart';
 import { formatGrams, formatRs, parseRupees } from '../domain/money';
+import {
+  buildOfflineSale,
+  findBarcode,
+  localTimestamp,
+  OFFLINE_METHODS,
+  offlineReceiptNo,
+  offlineStore,
+  searchCatalogue,
+  type RefusedSale,
+} from '../domain/offline';
 import { describeError } from '../i18n/errors';
 import { useI18n } from '../i18n/i18n';
 import type { StringKey } from '../i18n/strings';
@@ -101,7 +112,14 @@ export function Till({
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [dialog, setDialog] = useState<'cash' | 'printer' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [catalogue, setCatalogue] = useState<Catalogue | null>(() => offlineStore.catalogue());
+  const [queued, setQueued] = useState(() => offlineStore.queue().length);
+  const [refused, setRefused] = useState<RefusedSale[]>(() => offlineStore.refused());
   const searchRef = useRef<HTMLInputElement>(null);
+  const flushing = useRef(false);
+  /** Selling from this till's own copy of the product list. */
+  const offline = !online;
+  const methods = offline ? OFFLINE_METHODS : METHODS;
 
   const totals = useMemo(() => cartTotals(lines, discountBp), [lines, discountBp]);
   const tenderedPaisa = method === 'cash' ? (tendered.trim() === '' ? totals.total : parseRupees(tendered)) : totals.total;
@@ -127,11 +145,15 @@ export function Till({
   const guarded = async (action: TillAction, needsPin: boolean, message: StringKey, details: unknown, run: () => Promise<void> | void) => {
     setError(null);
     if (needsPin && user.role !== 'admin') {
+      if (offline) return setError(t('offNeedsMainPc'));
       setPending({ action, message: t(message), details, run });
       return;
     }
     try {
-      await api.recordAction({ action, tillCode, details });
+      // Offline, the action can't be logged; it still happens.
+      await api.recordAction({ action, tillCode, details }).catch((e) => {
+        if (!(e instanceof ApiError && e.code === 'network')) throw e;
+      });
       await run();
     } catch (e) {
       showError(e);
@@ -146,20 +168,83 @@ export function Till({
     await run();
   };
 
-  // Connection to the main PC.
+  /** Sends sales made offline, oldest first. Stops at the first network failure. */
+  const flushQueue = useCallback(async () => {
+    if (flushing.current) return;
+    flushing.current = true;
+    let sent = 0;
+    try {
+      for (;;) {
+        const [next] = offlineStore.queue();
+        if (!next) break;
+        try {
+          await api.createSale(next.input);
+        } catch (e) {
+          if (e instanceof ApiError && e.code === 'network') {
+            setOnline(false);
+            break;
+          }
+          // Refused for good (e.g. the receipt number is taken). Keep a note so the owner hears of it.
+          const note: RefusedSale = {
+            receiptNo: next.receipt.receiptNo,
+            total: next.receipt.total,
+            reason: describeError(e, lang),
+            at: localTimestamp(),
+          };
+          const all = [...offlineStore.refused(), note];
+          offlineStore.saveRefused(all);
+          setRefused(all);
+        }
+        offlineStore.saveQueue(offlineStore.queue().filter((q) => q.input.clientRef !== next.input.clientRef));
+        sent += 1;
+      }
+    } finally {
+      flushing.current = false;
+      setQueued(offlineStore.queue().length);
+      if (sent > 0 && offlineStore.queue().length === 0) setNotice(t('offSent'));
+    }
+  }, [lang, t]);
+
+  // Keep this till's copy of the product list fresh, for when the network drops.
+  const refreshCatalogue = useCallback(() => {
+    api
+      .catalogue(tillCode)
+      .then((c) => {
+        offlineStore.saveCatalogue(c);
+        setCatalogue(c);
+      })
+      .catch(() => undefined);
+  }, [tillCode]);
+  useEffect(() => {
+    refreshCatalogue();
+    const id = window.setInterval(refreshCatalogue, 5 * 60_000);
+    return () => window.clearInterval(id);
+  }, [refreshCatalogue]);
+
+  // Connection to the main PC. Queued offline sales go across as soon as it answers.
   useEffect(() => {
     let alive = true;
     const ping = () =>
       api
         .health()
-        .then(() => alive && setOnline(true))
+        .then(() => {
+          if (!alive) return;
+          setOnline(true);
+          if (offlineStore.queue().length > 0) void flushQueue();
+        })
         .catch(() => alive && setOnline(false));
+    ping();
     const id = window.setInterval(ping, 15_000);
     return () => {
       alive = false;
       window.clearInterval(id);
     };
-  }, []);
+  }, [flushQueue]);
+
+  // Back online after a drop: refresh the product list.
+  useEffect(() => {
+    if (online) refreshCatalogue();
+  }, [online, refreshCatalogue]);
 
   // Search as the cashier types.
   useEffect(() => {
@@ -168,17 +253,27 @@ export function Till({
       setResults(null);
       return;
     }
+    const show = (r: Product[]) => {
+      setResults(r);
+      setHighlight(0);
+    };
+    if (offline && catalogue) {
+      show(searchCatalogue(catalogue.products, q));
+      return;
+    }
     const id = window.setTimeout(() => {
       api
         .searchProducts(q)
-        .then((r) => {
-          setResults(r);
-          setHighlight(0);
-        })
-        .catch(showError);
+        .then(show)
+        .catch((e) => {
+          if (e instanceof ApiError && e.code === 'network' && catalogue) {
+            setOnline(false);
+            show(searchCatalogue(catalogue.products, q));
+          } else showError(e);
+        });
     }, 150);
     return () => window.clearTimeout(id);
-  }, [query]);
+  }, [query, offline, catalogue]);
 
   const add = (product: Product, unitId?: string | null) => {
     setLines((current) => addToCart(current, product, unitId));
@@ -193,18 +288,27 @@ export function Till({
     if (!q) return;
     // Scanners type the digits and press Enter.
     if (/^\d{6,}$/.test(q)) {
-      try {
+      if (offline && catalogue) {
+        const hit = findBarcode(catalogue, q);
+        if (hit) return add(hit.product, hit.unitId);
+      } else try {
         const hit = await api.byBarcode(q);
         add(hit.product, hit.unitId);
         return;
       } catch (e) {
-        if (!(e instanceof ApiError && e.status === 404)) {
+        if (e instanceof ApiError && e.code === 'network' && catalogue) {
+          setOnline(false);
+          const hit = findBarcode(catalogue, q);
+          if (hit) return add(hit.product, hit.unitId);
+        } else if (!(e instanceof ApiError && e.status === 404)) {
           showError(e);
           return;
         }
       }
     }
-    const list = results ?? (await api.searchProducts(q).catch(() => []));
+    const list =
+      results ??
+      (offline && catalogue ? searchCatalogue(catalogue.products, q) : await api.searchProducts(q).catch(() => []));
     const pick = list[highlight] ?? list[0];
     if (pick) add(pick);
     else setError(t('noMatch'));
@@ -256,6 +360,47 @@ export function Till({
       setNotice(t('drawerOpened'));
     });
 
+  const afterSale = (r: Receipt) => {
+    setApprovalNeeded(null);
+    setReceipt(r);
+    const cashSale = method === 'cash';
+    const doc = saleDoc(r, r.customerReceiptLanguage ?? r.store.receiptLanguage);
+    const drawer = cashSale && printer.openDrawerOnCash;
+    const job = printer.autoPrint
+      ? printDoc(doc, printer, { openDrawer: drawer })
+      : drawer && canPrintDirect(printer)
+        ? openDrawer(printer)
+        : Promise.resolve();
+    job.catch((e) => setError(t('printFailed', { msg: String(e) })));
+  };
+
+  /** Records the sale on this till, to be sent when the main PC is back. */
+  const payOffline = () => {
+    if (!catalogue) return setError(t('offNoCopy'));
+    if (method === 'khata') return setError(t('offNoKhata'));
+    if (discountBp > catalogue.maxDiscountBp && user.role !== 'admin') {
+      return setError(t('offDiscount', { max: catalogue.maxDiscountBp / 100 }));
+    }
+    const n = offlineStore.nextNo(tillCode, catalogue.lastOfflineNo);
+    const sale = buildOfflineSale({
+      store: catalogue.store,
+      tillCode,
+      user,
+      receiptNo: offlineReceiptNo(catalogue.store.code, tillCode, n),
+      createdAt: localTimestamp(),
+      lines,
+      discountBp,
+      method,
+      tendered: tenderedPaisa ?? totals.total,
+      clientRef,
+      customer: customer && { id: customer.id, name: customer.name },
+      weightRoundTo: catalogue.weightRoundTo,
+    });
+    offlineStore.saveQueue([...offlineStore.queue(), sale]);
+    setQueued(offlineStore.queue().length);
+    afterSale(sale.receipt);
+  };
+
   const pay = async (approval?: ApprovalInput) => {
     if (lines.length === 0 || busy) return;
     setError(null);
@@ -263,6 +408,7 @@ export function Till({
     if (tenderedPaisa === null || tenderedPaisa < totals.total) {
       return setError(t('shortBy', { amount: formatRs(totals.total - (tenderedPaisa ?? 0)) }));
     }
+    if (offline) return payOffline();
     setBusy(true);
     try {
       const r = await api.createSale({
@@ -274,19 +420,13 @@ export function Till({
         clientRef,
         approval,
       });
-      setApprovalNeeded(null);
-      setReceipt(r);
-      const cashSale = method === 'cash';
-      const doc = saleDoc(r, r.customerReceiptLanguage ?? r.store.receiptLanguage);
-      const drawer = cashSale && printer.openDrawerOnCash;
-      const job = printer.autoPrint
-        ? printDoc(doc, printer, { openDrawer: drawer })
-        : drawer && canPrintDirect(printer)
-          ? openDrawer(printer)
-          : Promise.resolve();
-      job.catch((e) => setError(t('printFailed', { msg: String(e) })));
+      afterSale(r);
     } catch (e) {
-      if (e instanceof ApiError && e.code === 'approval_required' && !approval) {
+      if (e instanceof ApiError && e.code === 'network' && catalogue && !approval) {
+        // The network dropped mid-sale. The same reference makes it safe if the main PC did get it.
+        setOnline(false);
+        payOffline();
+      } else if (e instanceof ApiError && e.code === 'approval_required' && !approval) {
         setApprovalNeeded(describeError(e, lang));
       } else if (approval) {
         throw e;
@@ -329,7 +469,19 @@ export function Till({
     api.setLanguage(next).catch(() => undefined);
   };
 
+  const blockedByQueue = () => {
+    if (offlineStore.queue().length === 0) return false;
+    setError(t('offQueueBlocks'));
+    void flushQueue();
+    return true;
+  };
+
+  const closeShift = () => {
+    if (!blockedByQueue()) onCloseShift();
+  };
+
   const signOut = async () => {
+    if (blockedByQueue()) return;
     await api.logout().catch(() => undefined);
     setToken(null);
     onSignOut();
@@ -355,8 +507,11 @@ export function Till({
         {online ? (
           <span className="pill pill-ok"><span className="led" />{t('online')}</span>
         ) : (
-          <span className="pill pill-bad" role="status">{t('offline')}</span>
+          <span className={`pill ${catalogue ? 'pill-warn' : 'pill-bad'}`} role="status" title={catalogue ? t('offCopyAge', { time: catalogue.generatedAt.slice(0, 16).replace('T', ' ') }) : undefined}>
+            {catalogue ? t('offSelling') : t('offline')}
+          </span>
         )}
+        {queued > 0 && <span className="pill pill-warn" role="status">{t('offWaiting', { n: queued })}</span>}
         <LanguageToggle value={lang} onChange={changeLanguage} onNight />
         <nav aria-label="Till actions" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           <button type="button" className="head-btn" onClick={onOpenReturns}>{t('headReturns')} <kbd>F9</kbd></button>
@@ -371,10 +526,31 @@ export function Till({
               <button type="button" className="head-btn" onClick={() => setDialog('printer')}>{t('headPrinter')}</button>
             </>
           )}
-          <button type="button" className="head-btn" onClick={onCloseShift}>{t('headCloseShift')}</button>
+          <button type="button" className="head-btn" onClick={closeShift}>{t('headCloseShift')}</button>
           <button type="button" className="head-btn" onClick={signOut}>{t('signOut')}</button>
         </nav>
       </header>
+      {refused.length > 0 && (
+        <div className="alert alert-bad" role="alert" style={{ margin: '12px 20px 0', display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div style={{ flex: 1 }}>
+            {refused.map((r) => (
+              <div key={r.receiptNo}>{t('offRefused', { no: r.receiptNo, amount: formatRs(r.total), reason: r.reason })}</div>
+            ))}
+          </div>
+          {isAdmin && (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                offlineStore.saveRefused([]);
+                setRefused([]);
+              }}
+            >
+              {t('offDismiss')}
+            </button>
+          )}
+        </div>
+      )}
       {notice && (
         <div className="alert alert-ok" role="status" style={{ margin: '12px 20px 0' }}>
           {notice}
@@ -601,7 +777,7 @@ export function Till({
           <div className="box box-pad">
             <span className="label small">{t('paymentMethod')}</span>
             <div className="methods">
-              {METHODS.map((m) => (
+              {methods.map((m) => (
                 <button key={m} type="button" className="choice" aria-pressed={method === m} onClick={() => setMethod(m)}>
                   {t(m)}
                 </button>
@@ -700,6 +876,7 @@ export function Till({
               <div className="actions">
                 <h2>{t('saleDone')}</h2>
                 <span className="mono" style={{ fontSize: 13 }}>{receipt.receiptNo}</span>
+                {/-X\d+$/.test(receipt.receiptNo) && <div className="alert alert-warn small">{t('offReceiptNote')}</div>}
                 {receipt.changeDue > 0 && (
                   <div className="alert alert-ok" style={{ fontSize: 22, fontWeight: 700 }}>
                     {t('changeToGive', { amount: formatRs(receipt.changeDue) })}

@@ -56,6 +56,7 @@ fn sell_panadol(conn: &mut Connection) -> sales::Receipt {
             payments: vec![sales::PaymentInput { method: "cash".into(), amount: 6_000 }],
             client_ref: None,
             approval: None,
+            offline: None,
         },
     )
     .unwrap()

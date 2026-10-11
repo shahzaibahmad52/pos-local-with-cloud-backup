@@ -128,6 +128,7 @@ h2 { margin: 0; font-size: 18px; }
 .pill { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; padding: 6px 12px; font-size: 13px; }
 .pill-ok { background: var(--night-2); color: #cfe6dc; }
 .pill-bad { background: var(--warn-bg); color: var(--warn-ink); font-weight: 600; }
+.pill-warn { background: #f3d27a; color: #3d2c00; font-weight: 600; }
 .pill .led { width: 8px; height: 8px; border-radius: 50%; background: #4fbf98; }
 .head-btn { height: 40px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--night-line); background: var(--night-2); color: var(--night-ink); }
 .till-body { flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 20px; align-items: flex-start; }

@@ -9,6 +9,7 @@ import type { StringKey } from '../i18n/strings';
 
 const ACTIONS: Record<string, [string, string]> = {
   'sale.approved': ['Sale approved (discount / khata)', 'سیل کی اجازت (رعایت / کھاتہ)'],
+  'sale.offline': ['Offline sale received from a till', 'ٹل سے آف لائن سیل وصول'],
   'return.create': ['Refund', 'ریفنڈ'],
   'shift.open': ['Shift opened', 'شفٹ شروع'],
   'shift.count': ['Cash counted', 'نقد گنا گیا'],
@@ -47,7 +48,7 @@ const ACTIONS: Record<string, [string, string]> = {
   'recovery.used': ['Password reset with recovery code', 'ریکوری کوڈ سے پاس ورڈ ری سیٹ'],
 };
 
-const MONEY_KEYS = ['amount', 'refund', 'counted', 'expected', 'difference', 'openingCash', 'khata', 'net', 'paidNow', 'costChange', 'short', 'extra'];
+const MONEY_KEYS = ['amount', 'refund', 'counted', 'expected', 'difference', 'openingCash', 'khata', 'net', 'paidNow', 'costChange', 'short', 'extra', 'total'];
 
 function actionLabel(action: string, lang: Language): string {
   const pair = ACTIONS[action];

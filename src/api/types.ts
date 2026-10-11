@@ -108,6 +108,24 @@ export interface SaleInput {
   payments: { method: PaymentMethod; amount: number }[];
   clientRef: string;
   approval?: ApprovalInput;
+  /** Set by a till that made the sale while the main PC couldn't be reached. */
+  offline?: {
+    receiptNo: string;
+    createdAt: string;
+    lines: { unitPrice: number; lineTotal: number }[];
+  };
+}
+
+/** The product list an extra till keeps, to keep selling if the network drops. */
+export interface Catalogue {
+  store: StoreHeader;
+  products: Product[];
+  /** [barcode, product id, pack id] */
+  barcodes: [string, string, string | null][];
+  maxDiscountBp: number;
+  weightRoundTo: number;
+  lastOfflineNo: number;
+  generatedAt: string;
 }
 
 export interface ReceiptLine {

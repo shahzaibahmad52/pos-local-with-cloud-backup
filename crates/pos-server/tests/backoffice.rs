@@ -420,6 +420,7 @@ fn dashboard_profit_after_sale_return_and_expense() {
             payments: vec![sales::PaymentInput { method: "cash".into(), amount: 9_000 }],
             client_ref: None,
             approval: None,
+            offline: None,
         },
     )
     .unwrap();

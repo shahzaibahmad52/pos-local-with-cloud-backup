@@ -40,6 +40,7 @@ fn sell(
         payments: vec![PaymentInput { method: method.into(), amount }],
         client_ref: None,
         approval: None,
+        offline: None,
     };
     sales::create_sale(conn, &Auth::default(), &owner, &input).unwrap()
 }
