@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use pos_server::{run, ServerConfig, DEFAULT_PORT};
 
-const HELP: &str = "pos-server — store server for the medical & general store POS
+const HELP: &str = "pos-server — store server for Bizflow POS
 
 USAGE:
     pos-server [--db PATH] [--host HOST] [--port PORT] [--demo]

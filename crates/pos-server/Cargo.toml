@@ -2,7 +2,7 @@
 name = "pos-server"
 version = "0.1.0"
 edition = "2021"
-description = "Store server for the medical & general store POS: SQLite database, sale logic and the local network API used by every till."
+description = "Store server for Bizflow POS: SQLite database, sale logic and the local network API used by every till."
 
 [lib]
 name = "pos_server"

@@ -1,4 +1,4 @@
-# Medical & General Store POS
+# Bizflow POS
 
 Point-of-sale for a medicine and general store in Pakistan. It is built to work fully offline, and each store has its own stock. It has an English / اردو interface and prints 80 mm receipts.
 
