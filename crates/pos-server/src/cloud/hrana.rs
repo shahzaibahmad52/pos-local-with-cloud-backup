@@ -137,6 +137,11 @@ impl Default for Client {
 }
 
 impl Client {
+    /// The underlying HTTP client, shared with other outside services (FBR).
+    pub fn http(&self) -> &reqwest::Client {
+        &self.http
+    }
+
     pub fn new() -> Self {
         let http = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(60))

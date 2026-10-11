@@ -23,8 +23,8 @@ use crate::{
     cloud::{backup, hq, sync, sync::Cloud},
     counts, dashboard,
     error::{AppError, AppResult},
-    expenses, import, inventory, khata, products, purchases, reports, returns, rules, sales, settings, shifts, store,
-    transfers,
+    expenses, fbr, import, inventory, khata, products, purchases, reports, returns, rules, sales, settings, shifts,
+    store, transfers,
 };
 
 #[derive(Clone)]
@@ -281,9 +281,26 @@ async fn create_sale(
     me: AuthUser,
     Json(input): Json<sales::SaleInput>,
 ) -> AppResult<Json<sales::Receipt>> {
-    let mut conn = s.db()?;
-    Ok(Json(sales::create_sale(&mut conn, &s.auth, &me.user, &input)?))
+    let receipt = {
+        let mut conn = s.db()?;
+        sales::create_sale(&mut conn, &s.auth, &me.user, &input)?
+    };
+    if receipt.fbr_invoice_no.is_some() || !fbr::enabled(&*s.db()?)? {
+        return Ok(Json(receipt));
+    }
+    // Give FBR a few seconds so the printed receipt can carry its number; otherwise it goes later.
+    if let Ok(Ok(Some(_))) =
+        tokio::time::timeout(FBR_WAIT, fbr::send_now(&s.db, s.cloud.client.http(), &receipt.id)).await
+    {
+        if let Some(r) = sales::receipt(&*s.db()?, &receipt.id)? {
+            return Ok(Json(r));
+        }
+    }
+    Ok(Json(receipt))
 }
+
+/// How long a sale waits for FBR's invoice number before printing without it.
+const FBR_WAIT: std::time::Duration = std::time::Duration::from_secs(4);
 
 async fn get_receipt(
     State(s): State<AppState>,
@@ -365,8 +382,40 @@ async fn create_return(
     me: AuthUser,
     Json(input): Json<returns::ReturnInput>,
 ) -> AppResult<Json<returns::ReturnSlip>> {
+    let slip = {
+        let mut conn = s.db()?;
+        returns::create_return(&mut conn, &s.auth, &me.user, &input)?
+    };
+    if slip.fbr_invoice_no.is_some() || !fbr::enabled(&*s.db()?)? {
+        return Ok(Json(slip));
+    }
+    if let Ok(Ok(Some(_))) = tokio::time::timeout(FBR_WAIT, fbr::send_now(&s.db, s.cloud.client.http(), &slip.id)).await
+    {
+        if let Some(r) = returns::return_slip(&*s.db()?, &slip.id)? {
+            return Ok(Json(r));
+        }
+    }
+    Ok(Json(slip))
+}
+
+async fn get_fbr(State(s): State<AppState>, _admin: AdminUser) -> AppResult<Json<fbr::FbrStatus>> {
+    Ok(Json(fbr::status(&*s.db()?)?))
+}
+
+async fn put_fbr(
+    State(s): State<AppState>,
+    admin: AdminUser,
+    Json(input): Json<fbr::FbrInput>,
+) -> AppResult<Json<fbr::FbrStatus>> {
     let mut conn = s.db()?;
-    Ok(Json(returns::create_return(&mut conn, &s.auth, &me.user, &input)?))
+    Ok(Json(fbr::save(&mut conn, &admin.0, &input)?))
+}
+
+/// Tries everything waiting for FBR now, instead of at the next retry.
+async fn send_fbr(State(s): State<AppState>, _admin: AdminUser) -> AppResult<Json<fbr::FbrStatus>> {
+    s.db()?.execute("UPDATE fbr_queue SET next_try_at = NULL WHERE sent_at IS NULL", [])?;
+    fbr::send_due(&s.db, s.cloud.client.http()).await?;
+    Ok(Json(fbr::status(&*s.db()?)?))
 }
 
 async fn return_slip(
@@ -979,6 +1028,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/khata/{id}/opening", post(khata_opening))
         .route("/api/customers/{id}", put(update_customer))
         .route("/api/tills/open", get(open_tills))
+        .route("/api/fbr", get(get_fbr).put(put_fbr))
+        .route("/api/fbr/send", post(send_fbr))
         .route("/api/cloud", get(get_cloud).put(enable_cloud).delete(disable_cloud))
         .route("/api/cloud/sync", post(sync_now))
         .route("/api/backups", post(backup_now))

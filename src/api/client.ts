@@ -1,6 +1,8 @@
 import type {
   ActivityEntry,
   Catalogue,
+  FbrInput,
+  FbrStatus,
   CloudPage,
   CountHead,
   CountView,
@@ -135,6 +137,9 @@ export const api = {
     request<Shift | null>('GET', `/api/shifts/current?tillCode=${encodeURIComponent(tillCode)}`),
   openShift: (tillCode: string, openingCash: number) =>
     request<Shift>('POST', '/api/shifts/open', { tillCode, openingCash }),
+  fbr: () => request<FbrStatus>('GET', '/api/fbr'),
+  saveFbr: (input: FbrInput) => request<FbrStatus>('PUT', '/api/fbr', input),
+  sendFbr: () => request<FbrStatus>('POST', '/api/fbr/send'),
   catalogue: (tillCode: string) => request<Catalogue>('GET', `/api/catalogue?tillCode=${encodeURIComponent(tillCode)}`),
   createSale: (input: SaleInput) => request<Receipt>('POST', '/api/sales', input),
   receipt: (id: string) => request<Receipt>('GET', `/api/sales/${encodeURIComponent(id)}/receipt`),

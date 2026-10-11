@@ -1,5 +1,18 @@
 import { createPortal } from 'react-dom';
 import type { Doc } from './doc';
+import { qrModules } from './qr';
+
+function QrCode({ text }: { text: string }) {
+  const m = qrModules(text);
+  const n = m.length + 8;
+  const path = m.flatMap((row, y) => row.map((dark, x) => (dark ? `M${x + 4} ${y + 4}h1v1h-1z` : ''))).join('');
+  return (
+    <svg className="qr" viewBox={`0 0 ${n} ${n}`} width={110} height={110} role="img" aria-label={text} shapeRendering="crispEdges">
+      <rect width={n} height={n} fill="#fff" />
+      <path d={path} fill="#000" />
+    </svg>
+  );
+}
 
 /** On-screen 80 mm preview of a printable document. */
 export function DocView({ doc }: { doc: Doc }) {
@@ -31,6 +44,12 @@ export function DocView({ doc }: { doc: Doc }) {
               <div key={i} className="rrow" style={{ fontWeight: b.bold ? 700 : undefined, fontSize: b.big ? 16 : undefined }}>
                 <span dir="auto">{b.label}</span>
                 <span className="ltr">{b.value}</span>
+              </div>
+            );
+          case 'qr':
+            return (
+              <div key={i} className="center">
+                <QrCode text={b.text} />
               </div>
             );
           case 'text':

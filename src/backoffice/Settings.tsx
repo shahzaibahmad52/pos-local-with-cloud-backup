@@ -7,6 +7,7 @@ import { PrintPortal } from '../print/DocView';
 import { recoveryCodeDoc, type Doc } from '../print/doc';
 import { printDoc, type PrinterSettings } from '../print/printer';
 import { CloudBackup } from './Cloud';
+import { FbrCard } from './Fbr';
 import { Modal } from './parts';
 
 export function Settings({
@@ -128,7 +129,6 @@ export function Settings({
               [
                 ['addonSms', 'addonSmsFree'],
                 ['addonWa', 'addonWaFree'],
-                ['addonFbr', 'addonFbrFree'],
               ] as const
             ).map(([title, free]) => (
               <div key={title} className="box box-pad" style={{ gap: 6 }}>
@@ -143,6 +143,7 @@ export function Settings({
             ))}
             <span className="tiny muted">{t('addonLater')}</span>
           </section>
+          <FbrCard />
         </div>
 
         <div className="aside" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

@@ -158,6 +158,30 @@ export interface Receipt {
   payments: { method: PaymentMethod; amount: number }[];
   khataBalance: number | null;
   store: StoreHeader;
+  /** FBR's invoice number, when FBR reporting is on and FBR accepted the sale. */
+  fbrInvoiceNo?: string | null;
+}
+
+export interface FbrStatus {
+  enabled: boolean;
+  mode: 'sandbox' | 'live';
+  posId: string | null;
+  hasToken: boolean;
+  defaultPct: string;
+  url: string | null;
+  waiting: number;
+  failing: number;
+  lastError: string | null;
+  lastSentAt: string | null;
+}
+
+export interface FbrInput {
+  enabled: boolean;
+  mode: 'sandbox' | 'live';
+  posId?: string;
+  token?: string;
+  defaultPct?: string;
+  url?: string;
 }
 
 export interface ApprovalInput {
@@ -241,6 +265,7 @@ export interface ReturnSlip {
   approvedByName: string | null;
   khataBalance: number | null;
   store: StoreHeader;
+  fbrInvoiceNo?: string | null;
 }
 
 export interface ShiftSummary {

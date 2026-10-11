@@ -14,6 +14,7 @@ pub mod dashboard;
 pub mod db;
 pub mod error;
 pub mod expenses;
+pub mod fbr;
 pub mod import;
 pub mod inventory;
 pub mod khata;
@@ -73,7 +74,8 @@ pub async fn run(config: ServerConfig) -> Result<(), Box<dyn std::error::Error +
 /// How often waiting changes are sent to the cloud while the internet is up.
 pub const SYNC_EVERY: std::time::Duration = std::time::Duration::from_secs(30);
 
-/// Runs forever: uploads changes to the cloud and makes the day's backup file.
+/// Runs forever: uploads changes to the cloud, sends invoices waiting for FBR
+/// and makes the day's backup file.
 async fn background(state: AppState) {
     let db = state.database();
     let cloud = state.cloud();
@@ -85,6 +87,7 @@ async fn background(state: AppState) {
         }
         // Errors are kept in the cloud status for the backoffice to show.
         let _ = cloud::sync::sync_once(&db, &cloud).await;
+        let _ = fbr::send_due(&db, cloud.client.http()).await;
         if let Some(dir) = state.backup_dir() {
             if cloud::backup::due(&dir) {
                 let db = db.clone();

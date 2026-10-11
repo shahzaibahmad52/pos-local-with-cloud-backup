@@ -44,6 +44,7 @@ const ACTIONS: Record<string, [string, string]> = {
   'count.cancel': ['Stock count cancelled', 'اسٹاک گنتی منسوخ'],
   'transfer.send': ['Stock sent to branch', 'برانچ کو اسٹاک بھیجا'],
   'transfer.receive': ['Stock received from branch', 'برانچ سے اسٹاک وصول'],
+  'fbr.settings': ['FBR settings changed', 'FBR سیٹنگز تبدیل'],
   'recovery.new': ['New recovery code made', 'نیا ریکوری کوڈ'],
   'recovery.used': ['Password reset with recovery code', 'ریکوری کوڈ سے پاس ورڈ ری سیٹ'],
 };

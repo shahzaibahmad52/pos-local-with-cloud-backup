@@ -3,6 +3,7 @@
 
 import { boEn, boUr } from './backoffice';
 import { repEn, repUr } from './reports';
+import { fbrEn, fbrUr } from './fbr';
 import { offEn, offUr } from './offline';
 import { opsEn, opsUr } from './stockops';
 
@@ -11,6 +12,7 @@ const en = {
   ...repEn,
   ...opsEn,
   ...offEn,
+  ...fbrEn,
   appName: 'Medical Store POS',
   loading: 'Loading…',
   retry: 'Try again',
@@ -252,6 +254,7 @@ const ur: Record<StringKey, string> = {
   ...repUr,
   ...opsUr,
   ...offUr,
+  ...fbrUr,
   appName: 'میڈیکل اسٹور POS',
   loading: 'لوڈ ہو رہا ہے…',
   retry: 'دوبارہ کوشش کریں',

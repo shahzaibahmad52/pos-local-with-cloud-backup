@@ -187,6 +187,7 @@ pub struct ReturnSlip {
     pub approved_by_name: Option<String>,
     pub khata_balance: Option<i64>,
     pub store: StoreHeader,
+    pub fbr_invoice_no: Option<String>,
 }
 
 struct SaleLineRow {
@@ -409,6 +410,7 @@ pub fn create_return(conn: &mut Connection, auth: &Auth, user: &User, input: &Re
         &json!({ "returnNo": return_no, "receiptNo": receipt_no, "refund": refund_total, "method": input.refund_method }),
         approver.as_ref().map(|a| a.id.as_str()),
     )?;
+    crate::fbr::queue(&tx, "return", &return_id)?;
     tx.commit()?;
     let slip = return_slip(conn, &return_id)?.ok_or_else(|| AppError::Internal("return vanished".into()))?;
     db::outbox(conn, "return", &return_id, "create", &serde_json::to_value(&slip).unwrap_or_default())?;
@@ -478,6 +480,7 @@ pub fn return_slip(conn: &Connection, return_id: &str) -> AppResult<Option<Retur
         Some(cid) if refund_method == "khata" => Some(sales::khata_balance(conn, cid)?),
         _ => None,
     };
+    let fbr_invoice_no = crate::fbr::invoice_no(conn, "return", &id)?;
     Ok(Some(ReturnSlip {
         id,
         return_no,
@@ -492,5 +495,6 @@ pub fn return_slip(conn: &Connection, return_id: &str) -> AppResult<Option<Retur
         approved_by_name,
         khata_balance,
         store: sales::store_header(conn)?,
+        fbr_invoice_no,
     }))
 }

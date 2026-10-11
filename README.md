@@ -6,6 +6,28 @@ UI design (all screens): https://claude.ai/artifact/DdLH1Rp4aDxSGTM2m2EKUz
 
 ## What works now
 
+### Milestone 6: stock counts, branch transfers, offline tills, FBR
+
+- **Stock counts** (Inventory › Stock count):
+  - Count one rack, items with no rack, or the whole store.
+  - Counts are blind by default: the counter types what is on the shelf without seeing the system figure.
+  - Each line remembers the system quantity at the moment it was counted. Applying the count changes stock only by the difference, so sales made while counting are kept.
+  - Items not on the shelf list can be added. Shortages are valued at cost and reasoned (damaged, expired, lost…); write-offs show in the P&L.
+- **Branch transfers** (Inventory › Branch transfers):
+  - Send batches to another branch. Stock leaves this branch at once and a transfer slip prints.
+  - The receiving branch finds incoming transfers in the sender's cloud copy (any store on its All stores list), or opens the transfer file sent over WhatsApp or USB.
+  - It confirms what arrived, line by line, with a reason for anything short. Products it has never stocked are created with their units, prices and barcodes. Receiving twice changes nothing.
+- **Extra tills keep selling when the shop network drops:**
+  - Each extra till keeps a copy of the product list, refreshed every 5 minutes.
+  - If the main PC can't be reached, the till says so and keeps selling from that copy with cash, card or wallets. Khata and PIN-protected actions wait for the main PC. Receipts get the till's own "X" numbers, e.g. `B1-T02-X000001`.
+  - The sales are sent across as soon as the main PC answers. The main PC records them as they happened (the till's prices and time), even if stock ran short. Anything unusual is flagged in the activity log.
+  - The shift can't be closed until every offline sale has been sent.
+- **FBR invoice reporting** (optional, Settings › FBR invoice reporting; off by default):
+  - For Tier-1 retailers. Enter the POS ID and token FBR issues, choose sandbox or live, and switch it on.
+  - Each sale and refund is sent to PRAL. FBR's invoice number and a QR code print on the receipt.
+  - A sale never waits on FBR for more than a few seconds. If FBR can't be reached, the invoice is queued and retried in the background. Settings shows what is waiting and the last error.
+  - **Not yet tested against FBR's real service:** it follows PRAL's published format and is tested against a stand-in. Try it with a sandbox POS ID before going live.
+
 ### Milestone 5: financial reports
 
 Backoffice › **Financial reports**: 19 reports for today, yesterday, the last 7 days, this month, last month or any dates. Each one can be printed on A4 (or saved as PDF from the print dialog) and exported to Excel, in English or Urdu.
@@ -126,7 +148,7 @@ Not built yet: stock count, transfers, full reports. See the roadmap below.
 ## How it fits together
 
 ```
- Store (one shop)                                        Cloud (later)
+ Store (one shop)                                        Cloud
  ┌──────────────────────────────────────────────┐
  │ Main PC                                      │
  │  Desktop app ── store server ── SQLite DB    │  outbox ──►  Turso (one database
@@ -138,7 +160,8 @@ Not built yet: stock count, transfers, full reports. See the roadmap below.
 
 - Each store has its own database on its main PC, so a store keeps selling with no internet.
 - Money is stored as whole paisa, and stock in the smallest unit (tablet, piece, gram).
-- The till never decides prices. The server recomputes every line, and the till's copy of the maths (`src/domain/pricing.ts`) is only for showing totals while scanning. Both copies are tested with the same cases.
+- If the shop network drops, an extra till keeps selling from its own copy of the product list and sends the sales to the main PC afterwards.
+- The till never decides prices while online. The server recomputes every line, and the till's copy of the maths (`src/domain/pricing.ts`) is only for showing totals while scanning. Both copies are tested with the same cases.
 
 ## Try it in a browser (any OS)
 
@@ -204,6 +227,12 @@ To set up a second till in the same shop:
 
 Keep each store's URL and token written down somewhere safe; they are what a new main PC needs to restore the store.
 
+### FBR invoice reporting (optional)
+
+Only for retailers FBR requires to integrate (Tier-1). Register the shop's POS with FBR/PRAL to get a POS ID and token, then on the main PC open Backoffice › Store, Users & Settings › **FBR invoice reporting**. Start with **Sandbox**; switch to **Live** once FBR confirms the sandbox invoices. The PCT code is 3004.9099 (medicines) by default; ask your tax adviser about general items.
+
+This part has not yet been tried against FBR's real service.
+
 ### Printing
 
 1. Sign in as the owner on the till.
@@ -218,16 +247,20 @@ The drawer must be cabled to the printer (RJ11 "DK" port); the app sends the sta
 crates/pos-server/   Store server: database, migrations, sale/return/shift rules, HTTP API (Rust, axum, rusqlite)
   src/cloud/         Turso client, cloud sync and restore, daily backup files, head-office view
   src/reports.rs     All financial and stock reports
+  src/counts.rs      Stock counts
+  src/transfers.rs   Transfers between branches
+  src/fbr.rs         Optional FBR (PRAL) invoice reporting
   migrations/        SQL schema
   tests/             End-to-end sale, return, shift and API tests
 crates/pos-printer/  ESC/POS image printing, paper cut, cash drawer; raw printing to Windows printers
 src/                 Till UI (React + TypeScript)
   api/               API client and types
-  domain/            Money maths and cart (mirrors the server)
+  domain/            Money maths and cart (mirrors the server), offline selling
   i18n/              English / Urdu text
   print/             Receipt / return slip / Z-report layout, screen preview, printer image
   screens/           Device setup, store setup, sign-in, open shift, Till, Returns, Close shift, Activity
-  backoffice/        Dashboard, Inventory, Product form, Excel import, Purchases, Suppliers, Expenses, Customers & Khata, Settings
+  backoffice/        Dashboard, Reports, Inventory, Stock counts, Transfers, Product form, Excel import, Purchases,
+                     Suppliers, Expenses, Customers & Khata, Settings (cloud, FBR), All stores
 src-tauri/           Desktop shell: main-PC / extra-till mode, starts the store server
 ```
 
@@ -257,7 +290,7 @@ CI runs all of these on every push.
    - Turso backup (one database per store), restore on a new PC, daily backup files.
    - Head-office view of all stores.
 5. **Reports** — done: P&L, product profit, sales by product / category / cashier / payment, cash book, stock valuation and movement, expiry, slow stock, purchases, payables, khata ageing, sales tax.
-6. **Extras:**
-   - Stock count and branch transfers.
-   - Optional FBR POS integration (off by default, per store).
+6. **Extras** — done:
+   - Stock counts and branch transfers.
    - An extra till keeps selling if the shop network drops, then catches up.
+   - Optional FBR invoice reporting (off by default, per store; not yet tried against FBR's live service).

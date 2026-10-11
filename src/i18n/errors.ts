@@ -63,6 +63,8 @@ const UR: Record<string, (p: Params) => string> = {
   'transfer.empty': () => 'کم از کم ایک آئٹم شامل کریں۔',
   'transfer.qty': (p) => `${s(p.product)} بیچ ${s(p.batch)}: اسٹاک میں صرف ${n(p.have)} ہیں۔`,
   'transfer.bad_file': () => 'یہ منتقلی فائل نہیں۔',
+  'fbr.incomplete': () => 'آن کرنے سے پہلے FBR کی دی ہوئی POS ID اور ٹوکن درج کریں۔',
+  'fbr.pos_id': () => 'FBR POS ID صرف نمبر ہوتی ہے۔',
   'transfer.wrong_store': (p) => `یہ منتقلی اسٹور ${s(p.to)} کے لیے ہے۔`,
   'transfer.received': () => 'وصول شدہ تعداد 0 اور بھیجی گئی تعداد کے درمیان ہونی چاہیے۔',
   'barcode.taken': (p) => `بارکوڈ ${s(p.code)} پہلے سے ${s(p.product)} پر ہے۔`,

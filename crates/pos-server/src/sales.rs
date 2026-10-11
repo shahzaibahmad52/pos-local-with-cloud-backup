@@ -135,6 +135,8 @@ pub struct Receipt {
     pub payments: Vec<ReceiptPayment>,
     pub khata_balance: Option<i64>,
     pub store: StoreHeader,
+    /// FBR's invoice number, once FBR has accepted the sale.
+    pub fbr_invoice_no: Option<String>,
 }
 
 struct PricedLine {
@@ -600,6 +602,7 @@ pub fn create_sale(conn: &mut Connection, auth: &Auth, user: &User, input: &Sale
         )?;
     }
 
+    crate::fbr::queue(&tx, "sale", &sale_id)?;
     tx.commit()?;
     let receipt = receipt(conn, &sale_id)?.ok_or_else(|| AppError::Internal("sale vanished".into()))?;
     db::outbox(conn, "sale", &sale_id, "create", &serde_json::to_value(&receipt).unwrap_or_default())?;
@@ -663,6 +666,7 @@ pub fn receipt(conn: &Connection, sale_id: &str) -> AppResult<Option<Receipt>> {
                         change_due: r.get(12)?,
                         payments: Vec::new(),
                         khata_balance: None,
+                        fbr_invoice_no: None,
                         store: StoreHeader {
                             code: String::new(),
                             name: String::new(),
@@ -681,6 +685,7 @@ pub fn receipt(conn: &Connection, sale_id: &str) -> AppResult<Option<Receipt>> {
         )
         .optional()?;
     let Some((mut rec, customer_id)) = head else { return Ok(None) };
+    rec.fbr_invoice_no = crate::fbr::invoice_no(conn, "sale", sale_id)?;
 
     let mut stmt = conn.prepare(
         "SELECT l.id, p.name, l.unit_name, p.sell_mode, l.qty, l.unit_price, l.line_total, l.tax_included

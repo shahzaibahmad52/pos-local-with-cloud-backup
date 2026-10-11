@@ -3,6 +3,7 @@
 // thermal printer, even one without an Urdu font.
 
 import type { Block, Doc } from './doc';
+import { qrModules } from './qr';
 
 /** Packs RGBA pixels into rows of bits, 1 = black dot, most significant bit first. */
 export function packBits(rgba: Uint8ClampedArray | Uint8Array, width: number, height: number, threshold = 160): Uint8Array {
@@ -148,6 +149,15 @@ export async function renderDoc(doc: Doc, width: number): Promise<HTMLCanvasElem
           ctx.fillText(line, rtl ? width - margin : margin, baseline(px));
           y += lineHeight(px);
         }
+        return;
+      }
+      case 'qr': {
+        const m = qrModules(b.text);
+        const cell = Math.max(3, Math.floor((200 * scale) / m.length));
+        const left = Math.round((width - cell * m.length) / 2);
+        y += Math.round(8 * scale);
+        m.forEach((row, r) => row.forEach((dark, c) => dark && ctx.fillRect(left + c * cell, y + r * cell, cell, cell)));
+        y += cell * m.length + Math.round(8 * scale);
         return;
       }
       case 'text': {

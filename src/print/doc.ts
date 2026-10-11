@@ -12,7 +12,9 @@ export type Block =
   | { kind: 'rule'; heavy?: boolean }
   | { kind: 'row'; label: string; value: string; bold?: boolean; big?: boolean }
   /** Full-width text; product names are always left-to-right. */
-  | { kind: 'text'; text: string; bold?: boolean; ltr?: boolean };
+  | { kind: 'text'; text: string; bold?: boolean; ltr?: boolean }
+  /** A QR code, centred (FBR's invoice number). */
+  | { kind: 'qr'; text: string };
 
 export interface Doc {
   dir: 'ltr' | 'rtl';
@@ -23,6 +25,8 @@ export interface Doc {
 
 const L = {
   receiptNo: ['Receipt #', 'رسید نمبر'],
+  fbrInvoice: ['FBR invoice #', 'FBR انوائس نمبر'],
+  fbrVerify: ['Verify with FBR’s Tax Asaan app', 'FBR کی ٹیکس آسان ایپ سے تصدیق کریں'],
   returnNo: ['Return #', 'واپسی نمبر'],
   originalReceipt: ['Original receipt', 'اصل رسید'],
   date: ['Date', 'تاریخ'],
@@ -144,6 +148,17 @@ function footer(store: StoreHeader, lang: ReceiptLanguage): string {
 
 const paidKey: Record<string, Key> = { cash: 'cash', card: 'card', jazzcash: 'jazzcash', easypaisa: 'easypaisa', khata: 'khata' };
 
+/** FBR's invoice number and its QR code, once FBR has accepted the invoice. */
+function fbrBlocks(no: string | null | undefined, t: (k: Key) => string): Block[] {
+  if (!no) return [];
+  return [
+    { kind: 'rule' },
+    { kind: 'row', label: t('fbrInvoice'), value: no, bold: true },
+    { kind: 'qr', text: no },
+    { kind: 'center', text: t('fbrVerify'), small: true },
+  ];
+}
+
 export function saleDoc(r: Receipt, lang: ReceiptLanguage): Doc {
   const t = make(lang);
   const b: Block[] = [
@@ -178,6 +193,7 @@ export function saleDoc(r: Receipt, lang: ReceiptLanguage): Doc {
   }
   if (r.changeDue > 0) b.push({ kind: 'row', label: t('change'), value: formatAmount(r.changeDue), bold: true });
   if (r.khataBalance !== null) b.push({ kind: 'row', label: t('khataBalance'), value: formatAmount(r.khataBalance) });
+  b.push(...fbrBlocks(r.fbrInvoiceNo, t));
   b.push({ kind: 'rule' });
   b.push({ kind: 'center', text: lang === 'both' ? `${L.policy[0]}\n${L.policy[1]}` : t('policy'), small: true });
   b.push({ kind: 'center', text: footer(r.store, lang), bold: true });
@@ -211,6 +227,7 @@ export function returnDoc(r: ReturnSlip, lang: ReceiptLanguage): Doc {
   b.push({ kind: 'row', label: t('refundedAs'), value: t(refundKey[r.refundMethod] ?? 'refundCash') });
   if (r.approvedByName) b.push({ kind: 'row', label: t('approvedBy'), value: r.approvedByName });
   if (r.khataBalance !== null) b.push({ kind: 'row', label: t('khataBalance'), value: formatAmount(r.khataBalance) });
+  b.push(...fbrBlocks(r.fbrInvoiceNo, t));
   b.push({ kind: 'rule' });
   b.push({ kind: 'center', text: r.returnNo, small: true, ltr: true });
   return { ...docDir(lang), blocks: b };
