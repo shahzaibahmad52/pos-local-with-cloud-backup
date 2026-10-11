@@ -18,4 +18,8 @@ describe('purchase maths (same cases as the server)', () => {
     // 5 boxes of 200 + 1 free, Rs 2,450 + Rs 300 freight.
     expect(costPerBase(lineMoney(5, 50_000, 200), 30_000, 5, 1, 200)).toBe(229);
   });
+
+  it('gives a tied leftover to the first line, as the server does', () => {
+    expect(splitFreight([1_000, 1_000], 1)).toEqual([1, 0]);
+  });
 });

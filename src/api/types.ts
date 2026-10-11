@@ -420,7 +420,15 @@ export interface ProductDetail extends InventoryRow {
   barcodes: { code: string; unitName: string | null }[];
   batches: BatchDetail[];
   lastBuy: LastBuy | null;
-  moves: { createdAt: string; batchNo: string | null; qtyDelta: number; reason: string; userName: string | null }[];
+  moves: {
+    createdAt: string;
+    batchNo: string | null;
+    qtyDelta: number;
+    reason: string;
+    /** For a correction or a count: damaged, expired, lost, count or other. */
+    why: string | null;
+    userName: string | null;
+  }[];
 }
 
 export interface UnitInput {

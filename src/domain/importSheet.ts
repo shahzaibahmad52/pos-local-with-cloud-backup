@@ -87,14 +87,16 @@ function parseCell(kind: Kind, v: Cell): Parsed {
     }
     case 'int': {
       const n = typeof v === 'number' ? v : Number(String(v).replace(/,/g, ''));
-      return Number.isFinite(n) && n >= 0 ? { ok: true, value: Math.round(n) } : { ok: false };
+      // "1.5" tablets is a typing mistake to point out, not something to round away.
+      return Number.isInteger(n) && n >= 0 ? { ok: true, value: n } : { ok: false };
     }
     case 'percent': {
-      const n = typeof v === 'number' ? v : Number(String(v).replace('%', ''));
+      const n = typeof v === 'number' ? v : Number(String(v).replace('%', '').trim());
       if (!Number.isFinite(n)) return { ok: false };
-      // Excel may store "18%" as 0.18.
+      // A cell formatted as % holds 0.18 for 18%; no tax rate is below 1%.
+      // Typed text ("0.5", "18%") is taken as written.
       const pct = typeof v === 'number' && v > 0 && v < 1 ? v * 100 : n;
-      return { ok: true, value: Math.round(pct * 100) };
+      return pct >= 0 && pct <= 100 ? { ok: true, value: Math.round(pct * 100) } : { ok: false };
     }
     case 'yesno': {
       if (typeof v === 'boolean') return { ok: true, value: v };

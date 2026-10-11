@@ -46,7 +46,7 @@ fn supplier_entries(conn: &Connection, supplier_id: &str) -> AppResult<Vec<Entry
          WHERE e.supplier_id = ?1 ORDER BY e.created_at, e.rowid",
     )?;
     let rows = stmt
-        .query_map([supplier_id], |r| Ok(Entry { amount: r.get(0)?, date: r.get(1)?, due: r.get(2)? }))?
+        .query_map([supplier_id], |r| Ok(Entry { amount: r.get(0)?, date: r.get(1)?, due: r.get(2)?, bill: None }))?
         .collect::<Result<Vec<_>, _>>()?;
     Ok(rows)
 }
@@ -232,8 +232,9 @@ pub fn split_freight(line_totals: &[i64], freight: i64) -> Vec<i64> {
         shares[i] = freight * t / sum;
         given += shares[i];
     }
-    // Rounding leftovers go to the biggest line.
-    let biggest = line_totals.iter().enumerate().max_by_key(|(_, t)| **t).map(|(i, _)| i).unwrap_or(0);
+    // Rounding leftovers go to the biggest line (the first, if two are equal,
+    // as the purchase screen shows it).
+    let biggest = (0..line_totals.len()).fold(0, |b, i| if line_totals[i] > line_totals[b] { i } else { b });
     shares[biggest] += freight - given;
     shares
 }
@@ -809,6 +810,11 @@ mod tests {
     fn line_discount() {
         // 5 boxes at Rs 500, 2% off.
         assert_eq!(line_money(5, 50_000, 200), LineMoney { gross: 250_000, discount: 5_000, total: 245_000 });
+    }
+
+    #[test]
+    fn freight_leftover_goes_to_the_first_biggest_line() {
+        assert_eq!(split_freight(&[1_000, 1_000], 1), vec![1, 0]);
     }
 
     #[test]

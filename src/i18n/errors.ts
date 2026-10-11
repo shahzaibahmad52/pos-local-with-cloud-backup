@@ -38,6 +38,7 @@ const UR: Record<string, (p: Params) => string> = {
   'sale.weight_missing': (p) => `${s(p.product)} کے لیے گرام یا رقم درج کریں۔`,
   'sale.weight_small': (p) => `${s(p.product)} کی رقم بہت کم ہے۔`,
   'sale.qty': (p) => `${s(p.product)} کی تعداد چیک کریں۔`,
+  'khata.inactive': (p) => `${s(p.customer)} کا کھاتہ بند ہے۔ پہلے گاہکوں میں دوبارہ کھولیں۔`,
   'shift.none': (p) => `ٹل ${s(p.till)} پر کوئی شفٹ کھلی نہیں۔ پہلے شفٹ شروع کریں۔`,
   'drawer.short': () => 'دراز میں اتنی نقد رقم نہیں ہے۔',
   'till.bad_code': () => 'ٹل کوڈ صرف بڑے انگریزی حروف اور ہندسے ہوتا ہے، جیسے T01۔',

@@ -5,7 +5,8 @@ export function formatRs(paisa: number): string {
 
 /** "1,290" or "1.60" from paisa, without the currency. */
 export function formatAmount(paisa: number): string {
-  const negative = paisa < 0;
+  // Sign after rounding, so a tiny negative shows as 0, not -0.
+  const negative = Math.round(paisa) < 0;
   const abs = Math.abs(Math.round(paisa));
   const rupees = Math.floor(abs / 100);
   const rest = abs % 100;
@@ -16,10 +17,19 @@ export function formatAmount(paisa: number): string {
 
 /** Parses what a cashier typed ("1,000", "99.5") into paisa; null if it isn't a number. */
 export function parseRupees(input: string): number | null {
-  const cleaned = input.replace(/[,\s]/g, '').replace(/^rs\.?/i, '');
-  if (cleaned === '' || !/^\d+(\.\d{1,2})?$/.test(cleaned)) return null;
-  const [whole, frac = ''] = cleaned.split('.');
-  return Number(whole) * 100 + Number(frac.padEnd(2, '0'));
+  const text = input
+    // Urdu (۰–۹) and Arabic (٠–٩) digits, and the Urdu decimal point.
+    .replace(/[\u06F0-\u06F9]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/\u066B/g, '.')
+    .replace(/\s/g, '')
+    .replace(/^rs\.?/i, '');
+  // Commas only between groups of 2 or 3 digits: 1,000 and 1,00,000, not 1,2,3.
+  if (!/^\d+(,\d{2,3})*(\.\d{1,2})?$/.test(text)) return null;
+  const [whole, frac = ''] = text.replace(/,/g, '').split('.');
+  const paisa = Number(whole) * 100 + Number(frac.padEnd(2, '0'));
+  // Rs 10 crore is the most the store server accepts.
+  return paisa <= 10_000_000_000 ? paisa : null;
 }
 
 /** "625 g" or "1.25 kg". */

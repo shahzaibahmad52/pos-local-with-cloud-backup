@@ -544,10 +544,10 @@ pub fn create_sale(conn: &mut Connection, auth: &Auth, user: &User, input: &Sale
             .because("payment.change_not_cash", json!({})));
     }
 
-    let customer: Option<(String, i64)> = match &input.customer_id {
+    let customer: Option<(String, i64, bool)> = match &input.customer_id {
         Some(cid) => Some(
-            tx.query_row("SELECT name, credit_limit FROM customers WHERE id = ?1", [cid], |r| {
-                Ok((r.get(0)?, r.get(1)?))
+            tx.query_row("SELECT name, credit_limit, active FROM customers WHERE id = ?1", [cid], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
             })
             .optional()?
             .ok_or_else(|| AppError::NotFound("Customer not found.".into()))?,
@@ -555,11 +555,15 @@ pub fn create_sale(conn: &mut Connection, auth: &Auth, user: &User, input: &Sale
         None => None,
     };
     if khata > 0 {
-        let Some((cname, limit)) = &customer else {
+        let Some((cname, limit, active)) = &customer else {
             return Err(
                 AppError::BadRequest("Choose the khata customer first.".into()).because("khata.no_customer", json!({}))
             );
         };
+        if !active {
+            return Err(AppError::BadRequest(format!("{cname}'s khata is closed. Reopen it in Customers first."))
+                .because("khata.inactive", json!({ "customer": cname })));
+        }
         let cid = input.customer_id.as_deref().unwrap_or_default();
         let balance = khata_balance(&tx, cid)?;
         if balance + khata > *limit && !approved {

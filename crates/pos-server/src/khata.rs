@@ -55,11 +55,11 @@ pub struct AccountList {
 
 pub fn entries(conn: &Connection, customer_id: &str) -> AppResult<Vec<Entry>> {
     let mut stmt = conn.prepare(
-        "SELECT amount, substr(created_at, 1, 10) FROM khata_entries WHERE customer_id = ?1
+        "SELECT amount, substr(created_at, 1, 10), sale_id FROM khata_entries WHERE customer_id = ?1
          ORDER BY created_at, rowid",
     )?;
     let rows = stmt
-        .query_map([customer_id], |r| Ok(Entry { amount: r.get(0)?, date: r.get(1)?, due: None }))?
+        .query_map([customer_id], |r| Ok(Entry { amount: r.get(0)?, date: r.get(1)?, due: None, bill: r.get(2)? }))?
         .collect::<Result<Vec<_>, _>>()?;
     Ok(rows)
 }

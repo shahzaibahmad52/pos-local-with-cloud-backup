@@ -89,8 +89,10 @@ fn row(pairs: Vec<(&str, Value)>) -> Map<String, Value> {
     pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect()
 }
 
+/// `part` as a share of `whole`, in basis points. Blank when there is nothing
+/// to take a share of: a day of refunds only has no margin, not +100%.
 fn pct(part: i64, whole: i64) -> Value {
-    if whole == 0 {
+    if whole <= 0 {
         Value::Null
     } else {
         json!(((part as f64 / whole as f64) * 10_000.0).round() as i64)
@@ -908,7 +910,14 @@ fn slow_stock(conn: &Connection, days: i64, r: &mut Report) -> AppResult<()> {
             [&p.id],
             |x| x.get(0),
         )?;
-        if last.as_deref().is_some_and(|d| d >= since.as_str()) {
+        // Stock that only just arrived hasn't had time to sell yet.
+        let first_in: Option<String> = conn.query_row(
+            "SELECT MIN(substr(received_at, 1, 10)) FROM batches WHERE product_id = ?1 AND qty_on_hand > 0",
+            [&p.id],
+            |x| x.get(0),
+        )?;
+        let idle_since = last.clone().max(first_in);
+        if idle_since.as_deref().is_some_and(|d| d >= since.as_str()) {
             continue;
         }
         p.units = inventory::unit_prices(conn, &p.id)?;
@@ -918,7 +927,7 @@ fn slow_stock(conn: &Connection, days: i64, r: &mut Report) -> AppResult<()> {
                 ("product", json!(p.name)),
                 ("qty", json!(fmt_qty(p.stock_base, &p.sell_mode, &p.base_unit, &p.units))),
                 ("value_cost", json!(p.stock_value)),
-                ("days", json!(last.as_deref().map(|d| ledger::days_between(d, &today)))),
+                ("days", json!(idle_since.as_deref().map(|d| ledger::days_between(d, &today)))),
                 ("last_sold", json!(last)),
             ]),
         ));

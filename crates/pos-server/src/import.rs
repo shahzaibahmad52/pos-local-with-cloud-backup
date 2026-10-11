@@ -338,9 +338,13 @@ pub fn run(conn: &mut Connection, user: &User, rows: &[ImportRow], commit: bool)
                 outcome = Err(format!("Same barcode as row {first}."));
             }
         }
-        seen_names.entry(name.to_lowercase()).or_insert(r.row);
-        if let Some(code) = clean(&r.barcode) {
-            seen_codes.entry(code).or_insert(r.row);
+        // Only a row that will be saved claims its name and barcode, so a
+        // corrected copy further down the sheet isn't blocked by a bad one.
+        if outcome.is_ok() {
+            seen_names.entry(name.to_lowercase()).or_insert(r.row);
+            if let Some(code) = clean(&r.barcode) {
+                seen_codes.entry(code).or_insert(r.row);
+            }
         }
         let (status, message) = match outcome {
             Err(m) => {

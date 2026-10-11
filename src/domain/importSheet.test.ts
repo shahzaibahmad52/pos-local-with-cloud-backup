@@ -46,4 +46,18 @@ describe('product sheet', () => {
     expect(rows).toEqual([]);
     expect(problems).toEqual([{ row: 2, name: 'Risek', message: "Can't read: Pack 2 holds (smallest units), Expiry (MM/YYYY)" }]);
   });
+
+  it('flags a fractional stock count and an impossible tax rate', () => {
+    const { rows, problems } = readSheet([
+      ['Product name', 'Unit', 'Price', 'GST', 'Stock'],
+      ['Comb', 'Pc', '50', '-5', '3'],
+      ['Mask', 'Pc', '20', '0.5', '1.5'],
+      ['Soap', 'Pc', '120', '18%', '6'],
+    ]);
+    expect(problems.map((p) => p.row)).toEqual([2, 3]);
+    expect(rows.find((r) => r.name === 'Soap')).toMatchObject({ taxRateBp: 1_800, openingQty: 6 });
+    // Typed text is taken as written: "0.5" is half a percent, not 50%.
+    const { rows: typed } = readSheet([['Product name', 'Unit', 'Price', 'GST'], ['Mask', 'Pc', '20', '0.5']]);
+    expect(typed[0].taxRateBp).toBe(50);
+  });
 });

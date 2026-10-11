@@ -12,6 +12,9 @@ pub struct Entry {
     pub date: String,
     /// When a charge falls due (`YYYY-MM-DD`), if it has terms.
     pub due: Option<String>,
+    /// The bill a charge is for, or a refund comes back from. A refund
+    /// settles its own bill first, so ageing follows what was returned.
+    pub bill: Option<String>,
 }
 
 /// A charge with the part of it still unpaid.
@@ -38,6 +41,16 @@ pub fn open_charges(entries: &[Entry]) -> Vec<Open> {
             }
         } else {
             let mut pay = -e.amount;
+            if let Some(bill) = &e.bill {
+                if let Some(o) = open
+                    .iter_mut()
+                    .find(|o| entries[o.index].amount > 0 && entries[o.index].bill.as_ref() == Some(bill))
+                {
+                    let take = pay.min(o.unpaid);
+                    o.unpaid -= take;
+                    pay -= take;
+                }
+            }
             for o in open.iter_mut() {
                 if pay == 0 {
                     break;
@@ -80,7 +93,21 @@ mod tests {
     use super::*;
 
     fn e(amount: i64, date: &str) -> Entry {
-        Entry { amount, date: date.into(), due: None }
+        Entry { amount, date: date.into(), due: None, bill: None }
+    }
+
+    #[test]
+    fn a_refund_settles_the_bill_it_came_back_from() {
+        let bill =
+            |amount: i64, date: &str, b: &str| Entry { amount, date: date.into(), due: None, bill: Some(b.into()) };
+        // An old bill and a new one; the new one is returned.
+        let open = open_charges(&[
+            bill(1_000, "2026-08-01", "a"),
+            bill(500, "2026-10-01", "b"),
+            bill(-500, "2026-10-02", "b"),
+        ]);
+        assert_eq!(open.len(), 1);
+        assert_eq!((open[0].date.as_str(), open[0].unpaid), ("2026-08-01", 1_000));
     }
 
     #[test]

@@ -312,3 +312,27 @@ fn a_sale_saved_just_as_the_network_dropped_keeps_both_numbers() {
     // …and the till won't hand that number out again.
     assert_eq!(products::catalogue(&conn, "T01").unwrap().last_offline_no, 5);
 }
+
+#[test]
+fn a_closed_khata_takes_no_new_credit() {
+    let mut conn = demo();
+    let p = panadol(&conn);
+    let imran: String = conn.query_row("SELECT id FROM customers WHERE name = 'Mr. Imran'", [], |r| r.get(0)).unwrap();
+    conn.execute("UPDATE customers SET active = 0 WHERE id = ?1", [&imran]).unwrap();
+    let err =
+        sale(&mut conn, strips(&p, 1), json!([{ "method": "khata", "amount": 3_000 }]), json!({ "customerId": imran }))
+            .unwrap_err();
+    assert_eq!(err.reason(), Some("khata.inactive"));
+}
+
+#[test]
+fn stock_history_says_why() {
+    let mut conn = demo();
+    let owner = user(&conn, "Owner");
+    let p = panadol(&conn);
+    let batch: String = conn.query_row("SELECT id FROM batches WHERE batch_no = 'B-2291'", [], |r| r.get(0)).unwrap();
+    inventory::adjust(&mut conn, &owner, &input(json!({ "batchId": batch, "newQty": 990, "reason": "expired" })))
+        .unwrap();
+    let d = inventory::detail(&conn, &p.id).unwrap();
+    assert_eq!((d.moves[0].reason.as_str(), d.moves[0].why.as_deref()), ("adjust", Some("expired")));
+}

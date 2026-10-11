@@ -220,7 +220,8 @@ pub fn demo(conn: &mut Connection) -> AppResult<bool> {
         },
         &owner.id,
     )?;
-    receive(conn, &owner, &soap.id, "-", None, 58, 10_000, vec![])?;
+    // Rs 85 a piece against Rs 120 (18% tax included): a normal margin.
+    receive(conn, &owner, &soap.id, "-", None, 58, 8_500, vec![])?;
 
     let sugar = products::create_product(
         conn,
@@ -298,7 +299,7 @@ pub fn demo(conn: &mut Connection) -> AppResult<bool> {
                 expiry: None,
                 qty: 4,
                 bonus: 0,
-                trade_price: 60_000,
+                trade_price: 52_000,
                 disc_bp: 200,
                 sale_price: None,
             }],

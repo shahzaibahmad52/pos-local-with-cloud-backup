@@ -286,7 +286,10 @@ function ProductPanel({ d, onEdit, onAdjust }: { d: ProductDetail; onEdit: () =>
         : null;
   const unitName = (id: string) => d.allUnits.find((u) => u.id === id)?.name ?? '';
   const moveKey = (reason: string): StringKey =>
-    (['opening', 'purchase', 'adjust', 'return'].includes(reason) ? `move_${reason}` : 'move_adjust') as StringKey;
+    (['opening', 'purchase', 'adjust', 'return', 'count', 'transfer_in', 'transfer_out'].includes(reason)
+      ? `move_${reason}`
+      : 'move_adjust') as StringKey;
+  const whyKey = (why: string | null): StringKey | null => REASONS.find(([r]) => r === why)?.[1] ?? null;
 
   return (
     <>
@@ -384,6 +387,7 @@ function ProductPanel({ d, onEdit, onAdjust }: { d: ProductDetail; onEdit: () =>
             <div key={i} className="list-row small">
               <span>
                 {formatDate(m.createdAt)} · {t(moveKey(m.reason))}
+                {whyKey(m.why) ? ` (${t(whyKey(m.why)!)})` : ''}
                 {m.batchNo ? ` · ${m.batchNo}` : ''}
               </span>
               <span className="mono" style={{ color: m.qtyDelta < 0 ? 'var(--bad)' : undefined }}>

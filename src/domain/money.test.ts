@@ -22,4 +22,12 @@ describe('money', () => {
     expect(formatGrams(1_000)).toBe('1 kg');
     expect(formatGrams(1_250)).toBe('1.25 kg');
   });
+
+  it('reads Urdu digits and lakh grouping, and refuses stray commas', () => {
+    expect(parseRupees('۱۲۵۰')).toBe(125_000);
+    expect(parseRupees('1,00,000')).toBe(10_000_000);
+    expect(parseRupees('1,2,3')).toBeNull();
+    expect(parseRupees('99999999999999999')).toBeNull();
+    expect(formatAmount(-0.4)).toBe('0');
+  });
 });

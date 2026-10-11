@@ -311,6 +311,8 @@ pub struct MoveDetail {
     pub batch_no: Option<String>,
     pub qty_delta: i64,
     pub reason: String,
+    /// Why, for a correction or a count line: damaged, expired, lost…
+    pub why: Option<String>,
     pub user_name: Option<String>,
 }
 
@@ -394,7 +396,11 @@ pub fn detail(conn: &Connection, id: &str) -> AppResult<ProductDetail> {
     }
     let moves = conn
         .prepare(
-            "SELECT m.created_at, b.batch_no, m.qty_delta, m.reason, u.name FROM stock_moves m
+            "SELECT m.created_at, b.batch_no, m.qty_delta, m.reason, u.name,
+                    CASE m.reason WHEN 'adjust' THEN m.ref_id
+                                  WHEN 'count' THEN (SELECT reason FROM stock_count_lines
+                                                     WHERE count_id = m.ref_id AND batch_id = m.batch_id) END
+             FROM stock_moves m
              LEFT JOIN batches b ON b.id = m.batch_id LEFT JOIN users u ON u.id = m.user_id
              WHERE m.product_id = ?1 AND m.reason <> 'sale' ORDER BY m.created_at DESC, m.rowid DESC LIMIT 15",
         )?
@@ -405,6 +411,7 @@ pub fn detail(conn: &Connection, id: &str) -> AppResult<ProductDetail> {
                 qty_delta: r.get(2)?,
                 reason: r.get(3)?,
                 user_name: r.get(4)?,
+                why: r.get(5)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;

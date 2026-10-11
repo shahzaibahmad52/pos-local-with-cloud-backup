@@ -50,6 +50,8 @@ fn sell(
 fn trading_day() -> Connection {
     let mut conn = db::open_in_memory().unwrap();
     seed::demo(&mut conn).unwrap();
+    // The demo stock has been on the shelves for a while.
+    conn.execute("UPDATE batches SET received_at = datetime('now', '-100 days')", []).unwrap();
     let ali = user(&conn, "Ali");
     store::open_shift(&conn, &ali, "T01", 500_000).unwrap();
     let panadol = unit_line(&conn, "Panadol", "Strip", 3);
@@ -208,6 +210,10 @@ fn stock_reports_match_the_shelves() {
     let slow = run(&conn, "slow_stock");
     assert!(slow.rows.iter().all(|r| r["product"] != "Panadol 500mg Tablet"));
     assert!(slow.rows.iter().any(|r| r["product"] == "Augmentin 625mg Tablet" && r["last_sold"] == Value::Null));
+    // Stock that only just arrived isn't slow yet.
+    conn.execute("UPDATE batches SET received_at = datetime('now') WHERE batch_no = 'AG-118'", []).unwrap();
+    let slow = run(&conn, "slow_stock");
+    assert!(slow.rows.iter().all(|r| r["product"] != "Augmentin 625mg Tablet"));
 }
 
 #[test]
