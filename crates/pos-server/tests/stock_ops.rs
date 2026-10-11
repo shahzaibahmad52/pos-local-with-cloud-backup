@@ -144,8 +144,12 @@ fn send_from_b1(b1: &mut Connection) -> transfers::TransferView {
             SendLine { batch_id: batch_id(b1, "B-2310"), qty: 100 },
             SendLine { batch_id: batch_id(b1, "AG-118"), qty: 12 },
         ],
+        client_ref: Some("send-1".into()),
     };
-    transfers::send(b1, &owner, &input).unwrap()
+    let sent = transfers::send(b1, &owner, &input).unwrap();
+    // A retry (or a double click) doesn't send the stock twice.
+    assert_eq!(transfers::send(b1, &owner, &input).unwrap().id, sent.id);
+    sent
 }
 
 #[test]
@@ -167,6 +171,7 @@ fn stock_moves_from_one_branch_to_another() {
         to_name: None,
         note: None,
         lines: vec![SendLine { batch_id: aug, qty: 999 }],
+        client_ref: None,
     };
     let err = transfers::send(&mut b1, &owner, &too_much).unwrap_err();
     assert_eq!(err.reason(), Some("transfer.qty"));

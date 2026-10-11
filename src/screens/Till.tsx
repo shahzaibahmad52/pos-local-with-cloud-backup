@@ -321,9 +321,19 @@ export function Till({
       }
     }
     const fresh = results && resultsFor.current === q ? results : null;
+    const fromCopy = () => (catalogue ? searchCatalogue(catalogue.products, q) : []);
     const list =
       fresh ??
-      (offline && catalogue ? searchCatalogue(catalogue.products, q) : await api.searchProducts(q).catch(() => []));
+      (offline
+        ? fromCopy()
+        : await api.searchProducts(q).catch((e) => {
+            // The network has just dropped: the till's own copy answers.
+            if (e instanceof ApiError && e.code === 'network') {
+              setOnline(false);
+              return fromCopy();
+            }
+            return [];
+          }));
     const pick = (fresh ? list[highlight] : undefined) ?? list[0];
     if (pick) add(pick);
     else setError(t('noMatch'));
@@ -548,6 +558,11 @@ export function Till({
           <button type="button" className="head-btn" onClick={signOut}>{t('signOut')}</button>
         </nav>
       </header>
+      {queued > 0 && !offlineStore.saved(tillCode) && (
+        <div className="alert alert-bad" role="alert" style={{ margin: '12px 20px 0' }}>
+          {t('offNotSaved', { n: queued })}
+        </div>
+      )}
       {signInAgain && queued > 0 && (
         <div className="alert alert-warn" role="alert" style={{ margin: '12px 20px 0' }}>
           {t('offSignInAgain', { n: queued })}

@@ -104,3 +104,23 @@ describe('offline till', () => {
     expect(sale.receipt.payments).toEqual([{ method: 'cash', amount: 16_000 }]);
   });
 });
+
+describe('offline till without browser storage', () => {
+  // Tests run where no browser storage exists: the same as a till whose storage is blocked.
+  it('still numbers sales one after another and keeps the queue', async () => {
+    const { offlineStore } = await import('./offline');
+    expect(offlineStore.nextNo('T09', 0)).toBe(1);
+    expect(offlineStore.nextNo('T09', 0)).toBe(2);
+    expect(offlineStore.nextNo('T09', 7)).toBe(8);
+    const sale = buildOfflineSale({
+      store, tillCode: 'T09', user: ali, receiptNo: offlineReceiptNo('B1', 'T09', 20), createdAt: '2026-10-11T10:15:00+05:00',
+      lines: [{ key: 'a', kind: 'unit', product: panadol, unitId: 'p1-tab', qty: 1 }], discountBp: 0, method: 'cash',
+      tendered: 300, clientRef: 'ref-9', customer: null, weightRoundTo: 100, priceListId: 'list-1',
+    });
+    offlineStore.saveQueue([sale]);
+    expect(offlineStore.queue()).toHaveLength(1);
+    // A waiting sale's number is never handed out again.
+    expect(offlineStore.nextNo('T09', 0)).toBe(21);
+    expect(offlineStore.saved('T09')).toBe(false);
+  });
+});

@@ -416,6 +416,18 @@ pub fn create_sale(conn: &mut Connection, auth: &Auth, user: &User, input: &Sale
         let existing: Option<String> =
             conn.query_row("SELECT id FROM sales WHERE client_ref = ?1", [r], |row| row.get(0)).optional()?;
         if let Some(id) = existing {
+            // The network dropped just as this sale was saved, so the till also
+            // printed its own offline number for it. Keep that number too, so
+            // the customer's receipt still finds the sale for a return.
+            if let Some(o) = &input.offline {
+                if valid_offline_no(&o.receipt_no, &store_code(conn)?, input.till_code.trim()) {
+                    conn.execute(
+                        "INSERT OR IGNORE INTO receipt_aliases (receipt_no, sale_id)
+                         SELECT ?1, ?2 WHERE NOT EXISTS (SELECT 1 FROM sales WHERE receipt_no = ?1)",
+                        params![o.receipt_no, id],
+                    )?;
+                }
+            }
             return receipt(conn, &id)?.ok_or_else(|| AppError::Internal("sale vanished".into()));
         }
     }
@@ -573,10 +585,12 @@ pub fn create_sale(conn: &mut Connection, auth: &Auth, user: &User, input: &Sale
     let sale_id = db::new_id();
     let (receipt_no, now) = match offline {
         Some(o) => {
-            let taken: bool =
-                tx.query_row("SELECT EXISTS (SELECT 1 FROM sales WHERE receipt_no = ?1)", [&o.receipt_no], |r| {
-                    r.get(0)
-                })?;
+            let taken: bool = tx.query_row(
+                "SELECT EXISTS (SELECT 1 FROM sales WHERE receipt_no = ?1)
+                    OR EXISTS (SELECT 1 FROM receipt_aliases WHERE receipt_no = ?1)",
+                [&o.receipt_no],
+                |r| r.get(0),
+            )?;
             if taken {
                 return Err(AppError::Conflict(format!("Receipt {} is already recorded.", o.receipt_no)));
             }

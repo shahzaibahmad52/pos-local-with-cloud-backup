@@ -121,6 +121,9 @@ pub struct SendInput {
     pub to_name: Option<String>,
     pub note: Option<String>,
     pub lines: Vec<SendLine>,
+    /// Lets the screen retry safely: the same reference sends once.
+    #[serde(default)]
+    pub client_ref: Option<String>,
 }
 
 fn note_line(conn: &Connection, batch_id: &str, qty: i64) -> AppResult<(String, NoteLine)> {
@@ -201,6 +204,14 @@ pub fn send(conn: &mut Connection, user: &User, input: &SendInput) -> AppResult<
     if input.lines.is_empty() {
         return Err(AppError::BadRequest("Add at least one item.".into()).because("transfer.empty", json!({})));
     }
+    let client_ref = input.client_ref.as_deref().map(str::trim).filter(|r| !r.is_empty());
+    if let Some(r) = client_ref {
+        let sent: Option<String> =
+            conn.query_row("SELECT id FROM transfers WHERE client_ref = ?1", [r], |row| row.get(0)).optional()?;
+        if let Some(id) = sent {
+            return view(conn, &id);
+        }
+    }
     let tx = conn.transaction()?;
     let n: i64 = tx.query_row("SELECT COUNT(*) FROM transfers WHERE direction = 'out'", [], |r| r.get(0))?;
     let id = db::new_id();
@@ -208,8 +219,9 @@ pub fn send(conn: &mut Connection, user: &User, input: &SendInput) -> AppResult<
     let now = db::now();
     let note = input.note.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
     tx.execute(
-        "INSERT INTO transfers (id, transfer_no, direction, other_code, other_name, status, note, user_id, created_at)
-         VALUES (?1, ?2, 'out', ?3, ?4, 'sent', ?5, ?6, ?7)",
+        "INSERT INTO transfers (id, transfer_no, direction, other_code, other_name, status, note, user_id, created_at,
+            client_ref)
+         VALUES (?1, ?2, 'out', ?3, ?4, 'sent', ?5, ?6, ?7, ?8)",
         params![
             id,
             transfer_no,
@@ -217,7 +229,8 @@ pub fn send(conn: &mut Connection, user: &User, input: &SendInput) -> AppResult<
             input.to_name.as_deref().map(str::trim).filter(|s| !s.is_empty()),
             note,
             user.id,
-            now
+            now,
+            client_ref
         ],
     )?;
     let mut lines = Vec::new();

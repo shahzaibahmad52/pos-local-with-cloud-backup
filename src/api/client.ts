@@ -248,7 +248,7 @@ export const api = {
   cancelCount: (countId: string) => request<CountView>('POST', `/api/counts/${id(countId)}/cancel`),
   transfers: () => request<{ transfers: TransferRow[]; stores: { id: string; code: string; name: string }[] }>('GET', '/api/transfers'),
   transfer: (transferId: string) => request<TransferView>('GET', `/api/transfers/${id(transferId)}`),
-  sendTransfer: (input: { toCode: string; toName?: string; note?: string; lines: { batchId: string; qty: number }[] }) =>
+  sendTransfer: (input: { toCode: string; toName?: string; note?: string; lines: { batchId: string; qty: number }[]; clientRef: string }) =>
     request<TransferView>('POST', '/api/transfers', input),
   incomingTransfers: () => request<{ notes: TransferNote[]; errors: [string, string][] }>('GET', '/api/transfers/incoming'),
   receiveTransfer: (note: TransferNote, received: { qty: number; reason?: string }[]) =>

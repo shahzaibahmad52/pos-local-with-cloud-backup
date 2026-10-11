@@ -634,7 +634,10 @@ pub fn catalogue(conn: &Connection, till_code: &str) -> AppResult<Catalogue> {
 
 fn last_offline_no(conn: &Connection, till_code: &str) -> AppResult<i64> {
     let nos: Vec<String> = conn
-        .prepare("SELECT receipt_no FROM sales WHERE till_code = ?1 AND receipt_no LIKE '%-X%'")?
+        .prepare(
+            "SELECT receipt_no FROM sales WHERE till_code = ?1 AND receipt_no LIKE '%-X%'
+             UNION ALL SELECT receipt_no FROM receipt_aliases WHERE receipt_no LIKE '%-' || ?1 || '-X%'",
+        )?
         .query_map([till_code], |r| r.get(0))?
         .collect::<Result<_, _>>()?;
     Ok(nos.iter().filter_map(|n| n.rsplit_once("-X").and_then(|(_, d)| d.parse::<i64>().ok())).max().unwrap_or(0))

@@ -68,7 +68,8 @@ pub fn sale_for_return(conn: &Connection, receipt_no: &str) -> AppResult<SaleFor
         .query_row(
             "SELECT s.id, s.receipt_no, s.created_at, u.name, s.customer_id, c.name, s.subtotal, s.total
              FROM sales s JOIN users u ON u.id = s.user_id LEFT JOIN customers c ON c.id = s.customer_id
-             WHERE s.receipt_no = ?1 AND s.status = 'completed'",
+             WHERE s.status = 'completed' AND (s.receipt_no = ?1
+                OR s.id = (SELECT sale_id FROM receipt_aliases WHERE receipt_no = ?1))",
             [receipt_no.trim().to_uppercase()],
             |r| {
                 Ok(SaleForReturn {

@@ -144,9 +144,18 @@ const KEY = {
   counter: (till: string) => `medstore.offline.no.${till}`,
 };
 
+/**
+ * What this session wrote, kept in memory too. If the browser won't store
+ * anything (blocked, full, a private window) the till still numbers and
+ * queues offline sales correctly for as long as it stays open.
+ */
+const memory = new Map<string, string>();
+/** Keys whose last save to the browser's storage failed. */
+const unsaved = new Set<string>();
+
 function read<T>(key: string, fallback: T): T {
   try {
-    const raw = window.localStorage.getItem(key);
+    const raw = memory.get(key) ?? window.localStorage.getItem(key);
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
     return fallback;
@@ -154,11 +163,23 @@ function read<T>(key: string, fallback: T): T {
 }
 
 function write(key: string, value: unknown): void {
+  const raw = JSON.stringify(value);
+  memory.set(key, raw);
   try {
-    window.localStorage.setItem(key, JSON.stringify(value));
+    window.localStorage.setItem(key, raw);
+    unsaved.delete(key);
   } catch {
-    // Storage full or blocked; the till still works online.
+    unsaved.add(key);
   }
+}
+
+/** The highest X number among this till's sales still waiting to be sent. */
+function highestQueued(till: string): number {
+  const nos = read<QueuedSale[]>(KEY.queue, [])
+    .map((q) => q.receipt.receiptNo)
+    .filter((no) => no.includes(`-${till}-X`))
+    .map((no) => Number(no.slice(no.lastIndexOf('-X') + 2)) || 0);
+  return Math.max(0, ...nos);
 }
 
 export const offlineStore = {
@@ -168,10 +189,12 @@ export const offlineStore = {
   saveQueue: (q: QueuedSale[]) => write(KEY.queue, q),
   refused: () => read<RefusedSale[]>(KEY.refused, []),
   saveRefused: (r: RefusedSale[]) => write(KEY.refused, r),
-  /** Takes the next X number, never below one the main PC already has. */
+  /** Takes the next X number: never one the main PC or the waiting queue already has. */
   nextNo: (till: string, serverLast: number): number => {
-    const n = Math.max(read<number>(KEY.counter(till), 0), serverLast) + 1;
+    const n = Math.max(read<number>(KEY.counter(till), 0), serverLast, highestQueued(till)) + 1;
     write(KEY.counter(till), n);
     return n;
   },
+  /** False when offline sales are only held in memory: closing the till would lose them. */
+  saved: (till: string): boolean => !unsaved.has(KEY.queue) && !unsaved.has(KEY.counter(till)),
 };

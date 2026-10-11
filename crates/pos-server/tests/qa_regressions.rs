@@ -287,3 +287,28 @@ fn adding_a_product_is_checked_like_editing_one() {
         input(json!({ "name": "COMB", "kind": "medicine", "baseUnit": p.base_unit, "units": units }));
     assert_eq!(inventory::update(&mut conn, &owner, &p.id, &rename).unwrap_err().reason(), Some("product.name_taken"));
 }
+
+#[test]
+fn a_sale_saved_just_as_the_network_dropped_keeps_both_numbers() {
+    let mut conn = demo();
+    let p = panadol(&conn);
+    let pay = json!([{ "method": "cash", "amount": 3_000 }]);
+    // The main PC saved it, but the answer never reached the till…
+    let saved = sale(&mut conn, strips(&p, 1), pay.clone(), json!({ "clientRef": "bill-7" })).unwrap();
+    // …so the till printed its own number and sends the sale again later.
+    let list = products::catalogue(&conn, "T01").unwrap().price_list_id;
+    let again = sale(
+        &mut conn,
+        strips(&p, 1),
+        pay,
+        json!({ "clientRef": "bill-7", "offline": { "receiptNo": "B1-T01-X000005",
+            "createdAt": chrono::Local::now().to_rfc3339(), "priceListId": list,
+            "lines": [{ "unitPrice": 3_000, "lineTotal": 3_000 }] } }),
+    )
+    .unwrap();
+    assert_eq!(again.id, saved.id, "recorded once");
+    // The customer's receipt (X000005) still finds the sale for a return…
+    assert_eq!(returns::sale_for_return(&conn, "b1-t01-x000005").unwrap().id, saved.id);
+    // …and the till won't hand that number out again.
+    assert_eq!(products::catalogue(&conn, "T01").unwrap().last_offline_no, 5);
+}

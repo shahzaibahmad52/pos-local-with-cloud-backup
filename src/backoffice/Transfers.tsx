@@ -9,6 +9,7 @@ import { describeError } from '../i18n/errors';
 import { useI18n } from '../i18n/i18n';
 import type { StringKey } from '../i18n/strings';
 import { PrintPortal } from '../print/DocView';
+import { newClientRef } from './parts';
 import { formatDateTime, transferDoc, type Doc } from '../print/doc';
 import { printDoc, type PrinterSettings } from '../print/printer';
 import type { Page } from './Backoffice';
@@ -291,6 +292,8 @@ function SendForm({ stores, onSent }: { stores: { id: string; code: string; name
   const [lines, setLines] = useState<SendLineState[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** One reference per transfer being written, so a retry can't send the stock twice. */
+  const [clientRef] = useState(newClientRef);
 
   useEffect(() => {
     const q = query.trim();
@@ -331,6 +334,7 @@ function SendForm({ stores, onSent }: { stores: { id: string; code: string; name
           toName: toName || undefined,
           note: note.trim() || undefined,
           lines: lines.map((l) => ({ batchId: l.batch.id, qty: baseQty(l) })),
+          clientRef,
         }),
       );
     } catch (e) {
