@@ -40,7 +40,7 @@ fn save(conn: &Connection, list: &[HqStore]) -> AppResult<()> {
 }
 
 fn lock(db: &Mutex<Connection>) -> AppResult<std::sync::MutexGuard<'_, Connection>> {
-    db.lock().map_err(|_| AppError::Internal("database lock poisoned".into()))
+    Ok(db.lock().unwrap_or_else(std::sync::PoisonError::into_inner))
 }
 
 #[derive(Debug, Serialize)]

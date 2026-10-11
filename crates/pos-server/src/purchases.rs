@@ -360,11 +360,14 @@ pub fn receive(conn: &mut Connection, user: &User, input: &PurchaseInput) -> App
     let this_month = db::current_month();
     for (i, l) in input.lines.iter().enumerate() {
         let n = i + 1;
-        if l.qty <= 0 || l.bonus < 0 {
+        if l.qty <= 0 || l.bonus < 0 || l.qty > crate::pricing::MAX_QTY || l.bonus > crate::pricing::MAX_QTY {
             return Err(AppError::BadRequest(format!("Line {n}: quantity must be more than 0."))
                 .because("purchase.qty", json!({ "line": n })));
         }
-        if l.trade_price < 0 || l.sale_price.is_some_and(|p| p < 0) || !(0..=10_000).contains(&l.disc_bp) {
+        if !(0..=crate::pricing::MAX_AMOUNT).contains(&l.trade_price)
+            || l.sale_price.is_some_and(|p| !(0..=crate::pricing::MAX_AMOUNT).contains(&p))
+            || !(0..=10_000).contains(&l.disc_bp)
+        {
             return Err(AppError::BadRequest(format!("Line {n}: check the prices and discount."))
                 .because("purchase.price", json!({ "line": n })));
         }
@@ -680,7 +683,7 @@ pub fn pay_supplier(
     supplier_id: &str,
     input: &SupplierPaymentInput,
 ) -> AppResult<SupplierView> {
-    if input.amount <= 0 {
+    if input.amount <= 0 || input.amount > crate::pricing::MAX_AMOUNT {
         return Err(AppError::BadRequest("Amount must be above 0.".into()));
     }
     let tx = conn.transaction()?;
@@ -733,7 +736,7 @@ pub struct OpeningInput {
 
 /// Carries over what the store already owed a supplier before using the app.
 pub fn add_opening(conn: &Connection, user: &User, supplier_id: &str, input: &OpeningInput) -> AppResult<SupplierView> {
-    if input.amount <= 0 {
+    if input.amount <= 0 || input.amount > crate::pricing::MAX_AMOUNT {
         return Err(AppError::BadRequest("Amount must be above 0.".into()));
     }
     let name: String = conn

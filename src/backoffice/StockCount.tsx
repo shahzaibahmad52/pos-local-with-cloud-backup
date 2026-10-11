@@ -4,7 +4,7 @@ import type { CountHead, CountLine, CountView, Product, RackProgress } from '../
 import { SearchIcon } from '../components/common';
 import { formatDateTime } from '../print/doc';
 import { formatMonth } from '../domain/dates';
-import { formatRs } from '../domain/money';
+import { formatRs, ltr } from '../domain/money';
 import { countingUnit, formatStock } from '../domain/stock';
 import { describeError } from '../i18n/errors';
 import { useI18n } from '../i18n/i18n';
@@ -71,12 +71,12 @@ export function StockCounts({ go }: { go: (p: Page) => void }) {
             </button>{' '}
             › {t('stockCount')}
           </span>
-          <h1>{t('countTitle')}</h1>
+          <h1>{t('scTitle')}</h1>
         </div>
       </div>
       <div className="cols">
         <section className="card grow">
-          <span className="small">{t('countHelp')}</span>
+          <span className="small">{t('scHelp')}</span>
           <div className="field">
             <label className="label" htmlFor="sc-section">{t('countWhat')}</label>
             <select id="sc-section" className="select" value={section} onChange={(e) => setSection(e.target.value)}>
@@ -162,7 +162,7 @@ function CountRow({ line, open, onSave }: { line: CountLine; open: boolean; onSa
   const [loose, setLoose] = useState(initial.loose);
   const [bad, setBad] = useState(false);
   const pack = line.sellMode === 'weight' ? null : countingUnit(line.units);
-  const fmt = (n: number) => formatStock(n, line.sellMode, line.baseUnit, line.units);
+  const fmt = (n: number) => ltr(formatStock(n, line.sellMode, line.baseUnit, line.units));
 
   const save = async () => {
     const v = join(line, packs, loose);
@@ -226,7 +226,7 @@ function CountRow({ line, open, onSave }: { line: CountLine; open: boolean; onSa
         )}
       </td>
       <td className="num small" style={{ color: line.difference ? (line.difference < 0 ? 'var(--bad)' : 'var(--warn)') : 'var(--brand)' }}>
-        {line.difference === null ? '' : line.difference === 0 ? '✓' : `${line.difference > 0 ? '+' : ''}${fmt(line.difference)}`}
+        {line.difference === null ? '' : line.difference === 0 ? '✓' : ltr(`${line.difference > 0 ? '+' : ''}${formatStock(line.difference, line.sellMode, line.baseUnit, line.units)}`)}
       </td>
       <td style={{ width: 170 }}>
         {line.difference ? (

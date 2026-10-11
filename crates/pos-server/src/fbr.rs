@@ -418,7 +418,7 @@ struct Reply {
 }
 
 fn lock(db: &Mutex<Connection>) -> AppResult<std::sync::MutexGuard<'_, Connection>> {
-    db.lock().map_err(|_| AppError::Internal("database lock poisoned".into()))
+    Ok(db.lock().unwrap_or_else(std::sync::PoisonError::into_inner))
 }
 
 /// Minutes to wait before trying a failed invoice again: 1, 2, 4… up to an hour.

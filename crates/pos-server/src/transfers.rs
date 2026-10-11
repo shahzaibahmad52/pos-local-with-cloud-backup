@@ -159,6 +159,13 @@ fn note_line(conn: &Connection, batch_id: &str, qty: i64) -> AppResult<(String, 
             })
         },
     )?;
+    if expiry.as_deref().is_some_and(|e| e < db::current_month().as_str()) {
+        return Err(AppError::BadRequest(format!(
+            "{} batch {batch_no} has expired and can't be sent.",
+            p.product_name
+        ))
+        .because("transfer.expired", json!({ "product": p.product_name, "batch": batch_no })));
+    }
     if qty <= 0 || qty > on_hand {
         return Err(AppError::BadRequest(format!(
             "{} batch {batch_no}: only {on_hand} {} in stock.",
@@ -272,17 +279,29 @@ pub struct ReceiveInput {
     pub received: Vec<Received>,
 }
 
-/// Finds this store's product for a note line: same barcode, else same name.
+/// Finds this store's product for a note line: same barcode, else same
+/// name. Only a product on sale, counted in the same unit, can take the stock.
 fn match_product(conn: &Connection, l: &NoteLine) -> AppResult<Option<String>> {
     for b in &l.barcodes {
-        let hit: Option<String> =
-            conn.query_row("SELECT product_id FROM barcodes WHERE code = ?1", [&b.code], |r| r.get(0)).optional()?;
+        let hit: Option<String> = conn
+            .query_row(
+                "SELECT b.product_id FROM barcodes b JOIN products p ON p.id = b.product_id
+                 WHERE b.code = ?1 AND p.active = 1 AND p.base_unit = ?2 COLLATE NOCASE AND p.sell_mode = ?3",
+                params![b.code, l.base_unit, l.sell_mode],
+                |r| r.get(0),
+            )
+            .optional()?;
         if hit.is_some() {
             return Ok(hit);
         }
     }
     Ok(conn
-        .query_row("SELECT id FROM products WHERE name = ?1 COLLATE NOCASE", [&l.product_name], |r| r.get(0))
+        .query_row(
+            "SELECT id FROM products WHERE name = ?1 COLLATE NOCASE AND active = 1
+                AND base_unit = ?2 COLLATE NOCASE AND sell_mode = ?3",
+            params![l.product_name, l.base_unit, l.sell_mode],
+            |r| r.get(0),
+        )
         .optional()?)
 }
 

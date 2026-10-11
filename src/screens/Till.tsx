@@ -95,6 +95,8 @@ export function Till({
   const [lines, setLines] = useState<CartLine[]>([]);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Product[] | null>(null);
+  /** The search text `results` are for, so Enter never adds from an older search. */
+  const resultsFor = useRef('');
   const [highlight, setHighlight] = useState(0);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState('');
@@ -113,15 +115,18 @@ export function Till({
   const [dialog, setDialog] = useState<'cash' | 'printer' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [catalogue, setCatalogue] = useState<Catalogue | null>(() => offlineStore.catalogue());
+  /** The store's rounding for loose items, so the bill matches what the main PC charges. */
+  const roundTo = catalogue?.weightRoundTo ?? 100;
   const [queued, setQueued] = useState(() => offlineStore.queue().length);
   const [refused, setRefused] = useState<RefusedSale[]>(() => offlineStore.refused());
+  const [signInAgain, setSignInAgain] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const flushing = useRef(false);
   /** Selling from this till's own copy of the product list. */
   const offline = !online;
   const methods = offline ? OFFLINE_METHODS : METHODS;
 
-  const totals = useMemo(() => cartTotals(lines, discountBp), [lines, discountBp]);
+  const totals = useMemo(() => cartTotals(lines, discountBp, roundTo), [lines, discountBp, roundTo]);
   const tenderedPaisa = method === 'cash' ? (tendered.trim() === '' ? totals.total : parseRupees(tendered)) : totals.total;
   const change = tenderedPaisa === null ? null : tenderedPaisa - totals.total;
   const customer = customers.find((c) => c.id === customerId) ?? null;
@@ -184,12 +189,20 @@ export function Till({
             setOnline(false);
             break;
           }
-          // Refused for good (e.g. the receipt number is taken). Keep a note so the owner hears of it.
+          // The main PC restarted and forgot this sign-in: keep the sales until someone signs in again.
+          if (e instanceof ApiError && e.status === 401) {
+            setSignInAgain(true);
+            break;
+          }
+          // Busy or broken for now: try again on the next round.
+          if (!(e instanceof ApiError) || e.status === 408 || e.status === 429 || e.status >= 500) break;
+          // Refused for good (e.g. the receipt number is taken). Keep the whole sale so the owner can see it.
           const note: RefusedSale = {
             receiptNo: next.receipt.receiptNo,
             total: next.receipt.total,
             reason: describeError(e, lang),
             at: localTimestamp(),
+            sale: next,
           };
           const all = [...offlineStore.refused(), note];
           offlineStore.saveRefused(all);
@@ -254,6 +267,7 @@ export function Till({
       return;
     }
     const show = (r: Product[]) => {
+      resultsFor.current = q;
       setResults(r);
       setHighlight(0);
     };
@@ -306,10 +320,11 @@ export function Till({
         }
       }
     }
+    const fresh = results && resultsFor.current === q ? results : null;
     const list =
-      results ??
+      fresh ??
       (offline && catalogue ? searchCatalogue(catalogue.products, q) : await api.searchProducts(q).catch(() => []));
-    const pick = list[highlight] ?? list[0];
+    const pick = (fresh ? list[highlight] : undefined) ?? list[0];
     if (pick) add(pick);
     else setError(t('noMatch'));
   };
@@ -470,7 +485,8 @@ export function Till({
   };
 
   const blockedByQueue = () => {
-    if (offlineStore.queue().length === 0) return false;
+    // Signing in again is what lets the queue go; it stays saved on this till.
+    if (offlineStore.queue().length === 0 || signInAgain) return false;
     setError(t('offQueueBlocks'));
     void flushQueue();
     return true;
@@ -530,6 +546,11 @@ export function Till({
           <button type="button" className="head-btn" onClick={signOut}>{t('signOut')}</button>
         </nav>
       </header>
+      {signInAgain && queued > 0 && (
+        <div className="alert alert-warn" role="alert" style={{ margin: '12px 20px 0' }}>
+          {t('offSignInAgain', { n: queued })}
+        </div>
+      )}
       {refused.length > 0 && (
         <div className="alert alert-bad" role="alert" style={{ margin: '12px 20px 0', display: 'flex', gap: 12, alignItems: 'center' }}>
           <div style={{ flex: 1 }}>
@@ -629,7 +650,7 @@ export function Till({
                 </div>
                 {lines.length === 0 && <div className="empty">{t('emptyBill')}</div>}
                 {lines.map((line) => {
-                  const priced = priceLine(line);
+                  const priced = priceLine(line, roundTo);
                   const onBill = baseQtyOnBill(lines, line.product.id);
                   const tooMuch = onBill > line.product.stockBase;
                   const soon = monthsUntil(line.product.nextExpiry);
@@ -650,7 +671,9 @@ export function Till({
                           </div>
                           <span className="tiny muted ltr" style={{ textAlign: 'start' }}>
                             {line.kind === 'weight'
-                              ? `${line.product.genericName ?? ''} = ${line.mode === 'amount' ? formatGrams(priced.grams ?? 0) : formatRs(priced.total)}`
+                              ? line.mode === 'amount'
+                                ? `${formatRs(priced.total)} = ${formatGrams(priced.grams ?? 0)}`
+                                : `${formatGrams(priced.grams ?? 0)} = ${formatRs(priced.total)}`
                               : meta}
                           </span>
                           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -695,7 +718,7 @@ export function Till({
                             </div>
                           </>
                         ) : (
-                          <WeightEditor line={line} onChange={(patch) => update(line.key, patch)} />
+                          <WeightEditor line={line} roundTo={roundTo} onChange={(patch) => update(line.key, patch)} />
                         )}
                         <span className="end num small muted">
                           {line.kind === 'weight' ? `${formatRs(priced.unitPrice)} ${t('perKg')}` : formatRs(priced.unitPrice)}
@@ -899,9 +922,9 @@ export function Till({
   );
 }
 
-function WeightEditor({ line, onChange }: { line: WeightLine; onChange: (patch: Partial<WeightLine>) => void }) {
+function WeightEditor({ line, roundTo, onChange }: { line: WeightLine; roundTo: number; onChange: (patch: Partial<WeightLine>) => void }) {
   const { t } = useI18n();
-  const priced = priceLine(line);
+  const priced = priceLine(line, roundTo);
   const switchMode = (mode: 'amount' | 'grams') => {
     if (mode === line.mode) return;
     // Keep the same quantity when switching: Rs 100 of sugar stays 625 g.
@@ -954,16 +977,20 @@ function QuickWeights({ onPick }: { onPick: (patch: Partial<WeightLine>) => void
 }
 
 function NewCustomerForm({ onCreated, onCancel }: { onCreated: (c: Customer) => void; onCancel: () => void }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (busy) return;
+    setBusy(true);
     try {
       onCreated(await api.createCustomer({ name, phone: phone || undefined }));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : String(err));
+      setError(describeError(err, lang));
+      setBusy(false);
     }
   };
   return (
@@ -973,7 +1000,7 @@ function NewCustomerForm({ onCreated, onCancel }: { onCreated: (c: Customer) => 
       {error && <div className="alert alert-bad">{error}</div>}
       <div style={{ display: 'flex', gap: 8 }}>
         <button type="button" className="btn" onClick={onCancel}>{t('cancel')}</button>
-        <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>{t('save')}</button>
+        <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={busy}>{t('save')}</button>
       </div>
     </form>
   );

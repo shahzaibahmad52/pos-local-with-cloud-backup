@@ -1,5 +1,7 @@
 //! End-to-end sale rules against the demo store.
 
+mod common;
+
 use pos_server::{
     auth::{self, Auth, User},
     db,
@@ -12,6 +14,7 @@ use rusqlite::Connection;
 fn store() -> Connection {
     let mut conn = db::open_in_memory().unwrap();
     assert!(seed::demo(&mut conn).unwrap());
+    common::ensure_shift(&conn);
     conn
 }
 
@@ -274,6 +277,10 @@ fn retrying_with_the_same_client_ref_does_not_double_sell() {
     assert_eq!(outbox, 1);
 }
 
+fn an_hour_ago() -> String {
+    (chrono::Local::now() - chrono::Duration::hours(1)).to_rfc3339_opts(chrono::SecondsFormat::Secs, false)
+}
+
 fn offline_sale(no: &str, lines: Vec<(SaleLineInput, i64, i64)>, paid: i64) -> SaleInput {
     SaleInput {
         till_code: "T02".into(),
@@ -285,7 +292,7 @@ fn offline_sale(no: &str, lines: Vec<(SaleLineInput, i64, i64)>, paid: i64) -> S
         approval: None,
         offline: Some(sales::OfflineSale {
             receipt_no: no.into(),
-            created_at: "2026-10-11T10:15:00+05:00".into(),
+            created_at: an_hour_ago(),
             lines: lines.iter().map(|l| sales::OfflineLine { unit_price: l.1, line_total: l.2 }).collect(),
         }),
     }
@@ -301,7 +308,7 @@ fn offline_sales_are_recorded_as_they_happened() {
     let r = sales::create_sale(&mut conn, &Auth::default(), &ali, &input).unwrap();
     assert_eq!(r.receipt_no, "B1-T02-X000001");
     assert_eq!(r.total, 600_000);
-    assert_eq!(r.created_at, "2026-10-11T10:15:00+05:00");
+    assert_eq!(r.created_at, input.offline.as_ref().unwrap().created_at);
     assert_eq!(batch_qty(&conn, "AG-118"), -6, "the shortfall shows up for the next count");
     let (action, details): (String, String) = conn
         .query_row("SELECT action, details FROM audit_log WHERE action = 'sale.offline'", [], |r| {

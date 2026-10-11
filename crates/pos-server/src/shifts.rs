@@ -124,6 +124,9 @@ pub fn summary(conn: &Connection, shift_id: &str, reveal_expected: bool) -> AppR
 
     let expected = opening_cash + cash_sales + cash_in - cash_out - cash_refunds;
     let reveal = reveal_expected || count_attempts > 0;
+    // Until the drawer is counted, nothing it could be worked out from is shown either.
+    let (cash_sales, cash_refunds, other_payments) =
+        if reveal { (cash_sales, cash_refunds, other_payments) } else { (0, 0, Default::default()) };
     Ok(ShiftSummary {
         id,
         till_code,
@@ -315,14 +318,29 @@ pub fn move_money(
         AppError::BadRequest("Choose which till's drawer the cash is from.".into()).because("drawer.no_till", json!({}))
     })?;
     let shift_id = open_shift_id(conn, till)?;
+    if kind == "out" {
+        ensure_drawer_has(conn, &shift_id, amount)?;
+    }
     Ok(Some(insert_cash_move(conn, &shift_id, user_id, kind, amount, reason, None)?))
+}
+
+/// Cash can't be taken out of a drawer that doesn't hold it. The amount in
+/// the drawer isn't named, so the blind count stays blind.
+fn ensure_drawer_has(conn: &Connection, shift_id: &str, amount: i64) -> AppResult<()> {
+    let in_drawer = summary(conn, shift_id, true)?.expected_cash.unwrap_or(0);
+    if amount > in_drawer {
+        return Err(
+            AppError::BadRequest("There isn't that much cash in the drawer.".into()).because("drawer.short", json!({}))
+        );
+    }
+    Ok(())
 }
 
 pub fn cash_move(conn: &Connection, auth: &Auth, user: &User, input: &CashMoveInput) -> AppResult<ShiftSummary> {
     if !matches!(input.kind.as_str(), "in" | "out") {
         return Err(AppError::BadRequest("Kind must be in or out.".into()));
     }
-    if input.amount <= 0 {
+    if input.amount <= 0 || input.amount > crate::pricing::MAX_AMOUNT {
         return Err(AppError::BadRequest("Amount must be above 0.".into()));
     }
     if input.reason.trim().is_empty() {
@@ -335,6 +353,9 @@ pub fn cash_move(conn: &Connection, auth: &Auth, user: &User, input: &CashMoveIn
     if input.kind == "out" && rules::load(conn)?.cash_out && approver.is_none() && !user.is_admin() {
         return Err(AppError::ApprovalRequired("Taking cash out needs a manager PIN.".into())
             .because("approval.cash_out", json!({})));
+    }
+    if input.kind == "out" {
+        ensure_drawer_has(conn, &shift_id, input.amount)?;
     }
     insert_cash_move(
         conn,

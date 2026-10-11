@@ -500,7 +500,12 @@ pub fn update(conn: &mut Connection, user: &User, id: &str, input: &ProductUpdat
         let mut names: Vec<String> = Vec::new();
         for u in &input.units {
             let n = u.unit.name.trim().to_lowercase();
-            if n.is_empty() || u.unit.base_qty <= 0 || u.unit.price < 0 {
+            if n.is_empty()
+                || u.unit.base_qty <= 0
+                || u.unit.price < 0
+                || u.unit.base_qty > crate::pricing::MAX_QTY
+                || u.unit.price > crate::pricing::MAX_AMOUNT
+            {
                 return Err(AppError::BadRequest(format!(
                     "Pack size \"{}\" needs a name, a quantity above 0 and a price.",
                     u.unit.name
@@ -543,17 +548,32 @@ pub fn update(conn: &mut Connection, user: &User, id: &str, input: &ProductUpdat
 
     if sell_mode == "unit" {
         let existing = tx
-            .prepare("SELECT id, name FROM product_units WHERE product_id = ?1")?
-            .query_map([id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+            .prepare("SELECT id, name, base_qty FROM product_units WHERE product_id = ?1")?
+            .query_map([id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?)))?
             .collect::<Result<Vec<_>, _>>()?;
+        // Rows that name their pack by id keep it, even if they rename it.
+        let claimed: Vec<&str> = input
+            .units
+            .iter()
+            .filter_map(|u| u.id.as_deref())
+            .filter(|uid| existing.iter().any(|(e, _, _)| e == uid))
+            .collect();
         let mut kept: Vec<String> = Vec::new();
         for (sort, u) in input.units.iter().enumerate() {
             // A new row with the name of a removed level brings that level back.
-            let unit_id = u.id.clone().filter(|uid| existing.iter().any(|(e, _)| e == uid)).or_else(|| {
-                existing.iter().find(|(_, n)| n.eq_ignore_ascii_case(u.unit.name.trim())).map(|(e, _)| e.clone())
+            let unit_id = u.id.clone().filter(|uid| claimed.contains(&uid.as_str())).or_else(|| {
+                existing
+                    .iter()
+                    .filter(|(e, _, _)| !claimed.contains(&e.as_str()) && !kept.contains(e))
+                    .find(|(_, n, _)| n.eq_ignore_ascii_case(u.unit.name.trim()))
+                    .map(|(e, _, _)| e.clone())
             });
             match unit_id {
                 Some(uid) => {
+                    // Prices printed on batches were per the old pack size; they no longer apply.
+                    if existing.iter().any(|(e, _, q)| *e == uid && *q != u.unit.base_qty) {
+                        tx.execute("DELETE FROM batch_unit_prices WHERE unit_id = ?1", [&uid])?;
+                    }
                     tx.execute(
                         "UPDATE product_units SET name = ?1, name_ur = ?2, base_qty = ?3, price = ?4, sellable = ?5,
                             sort = ?6 WHERE id = ?7",
@@ -566,7 +586,8 @@ pub fn update(conn: &mut Connection, user: &User, id: &str, input: &ProductUpdat
                             sort as i64,
                             uid
                         ],
-                    )?;
+                    )
+                    .map_err(|e| name_taken(e, &u.unit.name))?;
                     kept.push(uid);
                 }
                 None => {
@@ -584,12 +605,13 @@ pub fn update(conn: &mut Connection, user: &User, id: &str, input: &ProductUpdat
                             u.sellable,
                             sort as i64
                         ],
-                    )?;
+                    )
+                    .map_err(|e| name_taken(e, &u.unit.name))?;
                     kept.push(uid);
                 }
             }
         }
-        for (uid, _) in existing.iter().filter(|(e, _)| !kept.contains(e)) {
+        for (uid, _, _) in existing.iter().filter(|(e, _, _)| !kept.contains(e)) {
             tx.execute("UPDATE product_units SET sellable = 0 WHERE id = ?1", [uid])?;
         }
     }
@@ -643,7 +665,7 @@ pub struct AdjustInput {
 
 /// Corrects a batch's stock (breakage, expired stock thrown away, a recount).
 pub fn adjust(conn: &mut Connection, user: &User, input: &AdjustInput) -> AppResult<ProductDetail> {
-    if input.new_qty < 0 {
+    if input.new_qty < 0 || input.new_qty > crate::pricing::MAX_QTY {
         return Err(AppError::BadRequest("Stock can't be below 0.".into()));
     }
     if !ADJUST_REASONS.contains(&input.reason.as_str()) {
@@ -689,6 +711,19 @@ pub fn adjust(conn: &mut Connection, user: &User, input: &AdjustInput) -> AppRes
     db::outbox(&tx, "stock", &input.batch_id, "adjust", &json!({ "productId": product_id, "delta": delta }))?;
     tx.commit()?;
     detail(conn, &product_id)
+}
+
+/// A pack name clash (with a pack no longer sold, say) as a message, not a database error.
+fn name_taken(e: rusqlite::Error, name: &str) -> AppError {
+    match e {
+        rusqlite::Error::SqliteFailure(f, _) if f.code == rusqlite::ErrorCode::ConstraintViolation => {
+            AppError::BadRequest(format!(
+                "A pack called \"{}\" already exists for this product (perhaps one no longer sold).",
+                name.trim()
+            ))
+        }
+        e => e.into(),
+    }
 }
 
 #[cfg(test)]

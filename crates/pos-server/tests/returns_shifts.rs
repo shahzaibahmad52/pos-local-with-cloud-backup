@@ -1,5 +1,7 @@
 //! Returns, cash in/out, shift close and approval rules against the demo store.
 
+mod common;
+
 use std::collections::BTreeMap;
 
 use pos_server::{
@@ -55,6 +57,7 @@ fn sell(
         approval: None,
         offline: None,
     };
+    common::ensure_shift(conn);
     sales::create_sale(conn, &Auth::default(), who, &input).unwrap()
 }
 
@@ -222,8 +225,8 @@ fn shift_close_with_blind_count() {
     // The cashier can't see the expected amount before counting.
     let before = shifts::summary(&conn, &shift.id, false).unwrap();
     assert_eq!(before.expected_cash, None);
-    assert_eq!(before.cash_sales, 9_000);
-    assert_eq!(before.cash_refunds, 3_000);
+    assert_eq!((before.cash_sales, before.cash_refunds), (0, 0), "nor the figures it is made of");
+    assert!(before.other_payments.is_empty());
     assert_eq!(before.cash_out, 1_000);
 
     assert!(

@@ -110,3 +110,12 @@ pub async fn fake_cloud() -> (String, Fake) {
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     (format!("http://127.0.0.1:{}", addr.port()), fake)
 }
+
+/// Sales and refunds need an open shift on their till; opens one on T01 for the owner if none is open.
+pub fn ensure_shift(conn: &Connection) {
+    if pos_server::store::open_shift_for(conn, "T01").unwrap().is_none() {
+        let id: String = conn.query_row("SELECT id FROM users WHERE name = 'Owner'", [], |r| r.get(0)).unwrap();
+        let owner = pos_server::auth::load_user(conn, &id).unwrap().unwrap();
+        pos_server::store::open_shift(conn, &owner, "T01", 0).unwrap();
+    }
+}

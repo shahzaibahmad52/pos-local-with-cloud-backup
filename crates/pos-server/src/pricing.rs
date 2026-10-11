@@ -40,6 +40,12 @@ pub fn percent_of(amount: i64, bp: i64) -> i64 {
     round_div(amount * bp, 10_000)
 }
 
+/// The largest money amount accepted anywhere (Rs 10 crore, in paisa): far
+/// above any shop's bill, far below where sums could overflow.
+pub const MAX_AMOUNT: i64 = 10_000_000_000;
+/// The largest quantity accepted anywhere (in packs, base units or grams).
+pub const MAX_QTY: i64 = 10_000_000;
+
 #[cfg(test)]
 mod tests {
     use super::*;

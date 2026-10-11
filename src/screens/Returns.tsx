@@ -111,13 +111,15 @@ export function Returns({
   };
 
   const slipDoc = slip ? returnDoc(slip, store.receiptLanguage) : null;
-  const methods: [RefundMethod, StringKey][] = [
+  const allMethods: [RefundMethod, StringKey][] = [
     ['cash', 'cash'],
     ...(sale?.customerId ? ([['khata', 'khataCredit']] as [RefundMethod, StringKey][]) : []),
     ['card', 'card'],
     ['jazzcash', 'jazzcash'],
     ['easypaisa', 'easypaisa'],
   ];
+  // A bill put on khata is refunded to khata (the server insists too).
+  const methods = sale?.paymentMethods.includes('khata') && sale.customerId ? allMethods.filter(([m]) => m === 'khata') : allMethods;
 
   return (
     <div className="till app">

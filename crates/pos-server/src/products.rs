@@ -263,7 +263,12 @@ pub fn insert_product(tx: &Connection, input: &NewProduct, user_id: &str) -> App
                 return Err(AppError::BadRequest("Add at least one pack size (e.g. Tab or Strip).".into()));
             }
             for u in &input.units {
-                if u.name.trim().is_empty() || u.base_qty <= 0 || u.price < 0 {
+                if u.name.trim().is_empty()
+                    || u.base_qty <= 0
+                    || u.price < 0
+                    || u.base_qty > crate::pricing::MAX_QTY
+                    || u.price > crate::pricing::MAX_AMOUNT
+                {
                     return Err(AppError::BadRequest(format!(
                         "Pack size \"{}\" needs a name, a quantity above 0 and a price.",
                         u.name
@@ -390,7 +395,7 @@ pub fn receive_stock(conn: &mut Connection, input: &ReceiveStock, user_id: &str)
 
 /// Adds stock inside the caller's transaction.
 pub fn insert_stock(tx: &Connection, input: &ReceiveStock, user_id: &str) -> AppResult<()> {
-    if input.base_qty <= 0 {
+    if input.base_qty <= 0 || input.base_qty > crate::pricing::MAX_QTY {
         return Err(AppError::BadRequest("Quantity must be more than 0.".into()));
     }
     if input.cost_per_base < 0 {
@@ -416,28 +421,15 @@ pub fn insert_stock(tx: &Connection, input: &ReceiveStock, user_id: &str) -> App
     if !exists {
         return Err(AppError::NotFound("Product not found.".into()));
     }
-    let existing: Option<String> = tx
-        .query_row(
-            "SELECT id FROM batches WHERE product_id = ?1 AND batch_no = ?2",
-            params![input.product_id, batch_no],
-            |r| r.get(0),
-        )
-        .optional()?;
-    let batch_id = match existing {
-        Some(id) => {
-            tx.execute("UPDATE batches SET qty_on_hand = qty_on_hand + ?1 WHERE id = ?2", params![input.base_qty, id])?;
-            id
-        }
-        None => {
-            let id = db::new_id();
-            tx.execute(
-                "INSERT INTO batches (id, product_id, batch_no, expiry, cost_per_base, qty_on_hand, received_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                params![id, input.product_id, batch_no, input.expiry, input.cost_per_base, input.base_qty, db::now()],
-            )?;
-            id
-        }
-    };
+    // Same as a purchase: the cost is averaged and a different expiry is a different batch.
+    let batch_id = crate::purchases::add_to_batch(
+        tx,
+        &input.product_id,
+        batch_no,
+        input.expiry.as_deref(),
+        input.base_qty,
+        input.cost_per_base,
+    )?;
     for up in &input.unit_prices {
         let belongs: bool = tx
             .query_row(

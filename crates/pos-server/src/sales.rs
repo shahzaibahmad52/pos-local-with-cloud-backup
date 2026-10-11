@@ -76,8 +76,10 @@ pub struct OfflineLine {
 
 /// Valid offline receipt number for this store and till.
 pub fn valid_offline_no(no: &str, store: &str, till: &str) -> bool {
-    no.strip_prefix(&format!("{store}-{till}-X"))
-        .is_some_and(|n| !n.is_empty() && n.len() <= 9 && n.chars().all(|c| c.is_ascii_digit()))
+    // Exactly as the till prints it (X000006), so one number can't be written two ways.
+    no.strip_prefix(&format!("{store}-{till}-X")).is_some_and(|n| {
+        n.len() <= 9 && n.chars().all(|c| c.is_ascii_digit()) && n.parse::<u32>().is_ok_and(|v| format!("{v:06}") == n)
+    })
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -260,13 +262,22 @@ fn price_line(
         if per_kg <= 0 {
             return Err(AppError::BadRequest(format!("{name} has no price per kg.")));
         }
+        if line.grams.is_some_and(|g| g > pricing::MAX_QTY) || line.amount.is_some_and(|a| a > pricing::MAX_AMOUNT) {
+            return Err(AppError::BadRequest(format!("The weight or amount for {name} is too large."))
+                .because("sale.weight_large", json!({ "product": name })));
+        }
         let (grams, total) = match (line.grams, line.amount) {
             (Some(g), _) if g > 0 => (g, pricing::amount_for_grams(g, per_kg, weight_round_to)),
             (_, Some(a)) if a > 0 => (pricing::grams_for_amount(a, per_kg), a),
-            _ => return Err(AppError::BadRequest(format!("Enter grams or an amount for {name}."))),
+            _ => {
+                return Err(AppError::BadRequest(format!("Enter grams or an amount for {name}."))
+                    .because("sale.weight_missing", json!({ "product": name })))
+            }
         };
-        if grams <= 0 {
-            return Err(AppError::BadRequest(format!("The amount for {name} is too small.")));
+        // A pinch so small it rounds to Rs 0 would leave the shop for free.
+        if grams <= 0 || total <= 0 {
+            return Err(AppError::BadRequest(format!("The amount for {name} is too small."))
+                .because("sale.weight_small", json!({ "product": name })));
         }
         (None, "g".to_string(), grams, grams, per_kg, total)
     } else {
@@ -275,8 +286,9 @@ fn price_line(
             .as_deref()
             .ok_or_else(|| AppError::BadRequest(format!("Choose how {name} is sold (Tab, Strip…).")))?;
         let qty = line.qty.unwrap_or(0);
-        if qty <= 0 {
-            return Err(AppError::BadRequest(format!("Quantity for {name} must be at least 1.")));
+        if qty <= 0 || qty > pricing::MAX_QTY {
+            return Err(AppError::BadRequest(format!("Check the quantity for {name}."))
+                .because("sale.qty", json!({ "product": name })));
         }
         let unit: Option<(String, i64, i64)> = tx
             .query_row(
@@ -371,8 +383,32 @@ pub fn create_sale(conn: &mut Connection, auth: &Auth, user: &User, input: &Sale
         if !valid_offline_no(&o.receipt_no, &store_code, till_code) {
             return Err(AppError::BadRequest("That offline receipt number isn't from this till.".into()));
         }
-        if o.lines.len() != input.lines.len() || chrono::DateTime::parse_from_rfc3339(&o.created_at).is_err() {
+        if o.lines.len() != input.lines.len() {
             return Err(AppError::BadRequest("The offline sale is incomplete.".into()));
+        }
+        // A till is offline for hours, not weeks, and never sells in the future.
+        let sold_at = chrono::DateTime::parse_from_rfc3339(&o.created_at)
+            .map_err(|_| AppError::BadRequest("The offline sale has no valid time.".into()))?;
+        let age = chrono::Local::now().signed_duration_since(sold_at);
+        if age < -chrono::Duration::minutes(10) || age > chrono::Duration::days(7) {
+            return Err(AppError::BadRequest(
+                "The offline sale's time is out of range. Check the till's clock.".into(),
+            )
+            .because("offline.time", json!({})));
+        }
+        // What a real till sends always adds up: price × quantity, nothing negative.
+        let adds_up = o.lines.iter().zip(&input.lines).all(|(ol, l)| {
+            (0..=pricing::MAX_AMOUNT).contains(&ol.unit_price)
+                && (0..=pricing::MAX_AMOUNT).contains(&ol.line_total)
+                && match l.qty {
+                    Some(q) if l.grams.is_none() && l.amount.is_none() => {
+                        ol.unit_price.checked_mul(q) == Some(ol.line_total)
+                    }
+                    _ => ol.line_total > 0,
+                }
+        });
+        if !adds_up {
+            return Err(AppError::BadRequest("The offline sale's prices don't add up.".into()));
         }
         if input.payments.iter().any(|p| p.method == "khata") {
             return Err(AppError::BadRequest("Khata isn't allowed for offline sales.".into()));
@@ -412,6 +448,9 @@ pub fn create_sale(conn: &mut Connection, auth: &Auth, user: &User, input: &Sale
             }
         }
         let priced = price_line(&tx, &mut reserved, line, weight_round_to, off)?;
+        if off.is_some() && priced.line_total == 0 && priced.list_total > 0 {
+            return Err(AppError::BadRequest("An offline sale can't give away an item that has a price.".into()));
+        }
         price_differs |= priced.line_total != priced.list_total;
         lines.push(priced);
     }
@@ -429,7 +468,7 @@ pub fn create_sale(conn: &mut Connection, auth: &Auth, user: &User, input: &Sale
         if !PAYMENT_METHODS.contains(&p.method.as_str()) {
             return Err(AppError::BadRequest(format!("Unknown payment method: {}", p.method)));
         }
-        if p.amount <= 0 {
+        if p.amount <= 0 || p.amount > pricing::MAX_AMOUNT {
             return Err(AppError::BadRequest("Payment amounts must be above 0.".into()));
         }
         paid += p.amount;
@@ -480,6 +519,12 @@ pub fn create_sale(conn: &mut Connection, auth: &Auth, user: &User, input: &Sale
     let shift_id: Option<String> = tx
         .query_row("SELECT id FROM shifts WHERE till_code = ?1 AND status = 'open'", [till_code], |r| r.get(0))
         .optional()?;
+    // Money taken outside a shift would never reach a Z-report. Offline sales
+    // already happened, so they are kept even if the shift has since closed.
+    if shift_id.is_none() && offline.is_none() {
+        return Err(AppError::Conflict(format!("Till {till_code} has no open shift. Start a shift first."))
+            .because("shift.none", json!({ "till": till_code })));
+    }
 
     let sale_id = db::new_id();
     let (receipt_no, now) = match offline {
@@ -554,9 +599,17 @@ pub fn create_sale(conn: &mut Connection, auth: &Auth, user: &User, input: &Sale
         }
     }
 
+    // Record cash as what stayed in the drawer, not what was handed over.
+    // The change comes out once, however many cash amounts make up the bill.
+    let mut change_left = change_due;
     for p in &input.payments {
-        // Record cash as what stayed in the drawer, not what was handed over.
-        let amount = if p.method == "cash" { p.amount - change_due.min(p.amount) } else { p.amount };
+        let amount = if p.method == "cash" {
+            let back = change_left.min(p.amount);
+            change_left -= back;
+            p.amount - back
+        } else {
+            p.amount
+        };
         if amount <= 0 {
             continue;
         }

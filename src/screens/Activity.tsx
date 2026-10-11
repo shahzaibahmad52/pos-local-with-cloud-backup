@@ -86,6 +86,7 @@ export function Activity({ store, onBack, backLabel }: { store: StoreHeader; onB
   const [all, setAll] = useState<ActivityEntry[]>([]);
   const [rules, setRules] = useState<ApprovalRules | null>(null);
   const [refundText, setRefundText] = useState('');
+  const [discountText, setDiscountText] = useState('');
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
@@ -104,6 +105,7 @@ export function Activity({ store, onBack, backLabel }: { store: StoreHeader; onB
       .then((r) => {
         setRules(r);
         setRefundText(String(r.refundApprovalAbove / 100));
+        setDiscountText(String(r.cashierMaxDiscountBp / 100));
       })
       .catch((e) => setMessage({ ok: false, text: describeError(e, lang) }));
   }, [lang]);
@@ -112,8 +114,13 @@ export function Activity({ store, onBack, backLabel }: { store: StoreHeader; onB
     if (!rules) return;
     const refund = parseRupees(refundText);
     if (refund === null) return setMessage({ ok: false, text: t('ruleRefund') });
+    // Percent with up to two decimals: 2.5 → 250 basis points.
+    const pct = Number(discountText.trim());
+    if (discountText.trim() === '' || !Number.isFinite(pct) || pct < 0 || pct > 100) {
+      return setMessage({ ok: false, text: t('ruleDiscount') });
+    }
     try {
-      setRules(await api.saveRules({ ...rules, refundApprovalAbove: refund }));
+      setRules(await api.saveRules({ ...rules, refundApprovalAbove: refund, cashierMaxDiscountBp: Math.round(pct * 100) }));
       setMessage({ ok: true, text: t('saved') });
     } catch (e) {
       setMessage({ ok: false, text: describeError(e, lang) });
@@ -223,12 +230,9 @@ export function Activity({ store, onBack, backLabel }: { store: StoreHeader; onB
                   id="rule-discount"
                   className="input ltr mono"
                   style={{ width: 80, height: 40, textAlign: 'center' }}
-                  inputMode="numeric"
-                  value={rules.cashierMaxDiscountBp / 100}
-                  onChange={(e) => {
-                    const n = parseInt(e.target.value.replace(/\D/g, ''), 10);
-                    setRules({ ...rules, cashierMaxDiscountBp: Number.isNaN(n) ? 0 : Math.min(100, n) * 100 });
-                  }}
+                  inputMode="decimal"
+                  value={discountText}
+                  onChange={(e) => setDiscountText(e.target.value)}
                 />
               </div>
               <div className="row">

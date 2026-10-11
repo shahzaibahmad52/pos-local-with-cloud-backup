@@ -1,5 +1,7 @@
 //! Reporting sales and refunds to FBR, against a stand-in for PRAL's service.
 
+mod common;
+
 use std::sync::{Arc, Mutex};
 
 use axum::{extract::State, http::HeaderMap, routing::post, Json, Router};
@@ -98,6 +100,7 @@ async fn sales_and_refunds_go_to_fbr_with_their_invoice_numbers() {
     let (url, pral) = fake_pral().await;
     let mut conn = db::open_in_memory().unwrap();
     seed::demo(&mut conn).unwrap();
+    common::ensure_shift(&conn);
 
     // Off by default: nothing is queued.
     sell(&mut conn, 0);
@@ -165,6 +168,7 @@ async fn refused_invoices_wait_and_are_retried() {
     let (url, pral) = fake_pral().await;
     let mut conn = db::open_in_memory().unwrap();
     seed::demo(&mut conn).unwrap();
+    common::ensure_shift(&conn);
     switch_on(&mut conn, &url);
     *pral.refuse.lock().unwrap() = true;
     let r = sell(&mut conn, 0);
@@ -193,6 +197,7 @@ async fn refused_invoices_wait_and_are_retried() {
 fn switching_on_needs_the_pos_id_and_token() {
     let mut conn = db::open_in_memory().unwrap();
     seed::demo(&mut conn).unwrap();
+    common::ensure_shift(&conn);
     let owner = user(&conn, "Owner");
     let input = FbrInput {
         enabled: true,

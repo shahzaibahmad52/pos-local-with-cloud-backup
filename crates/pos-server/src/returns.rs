@@ -293,6 +293,16 @@ pub fn create_return(conn: &mut Connection, auth: &Auth, user: &User, input: &Re
         return Err(AppError::BadRequest("This sale had no khata customer. Refund in cash instead.".into())
             .because("return.no_khata_customer", json!({})));
     }
+    // A bill put on khata is refunded to khata, so no cash leaves the drawer for money never paid.
+    let on_khata: bool = conn.query_row(
+        "SELECT EXISTS (SELECT 1 FROM payments WHERE sale_id = ?1 AND method = 'khata')",
+        [&input.sale_id],
+        |r| r.get(0),
+    )?;
+    if on_khata && input.refund_method != "khata" {
+        return Err(AppError::BadRequest("This sale was put on khata, so the refund goes back to khata.".into())
+            .because("return.khata_sale", json!({})));
+    }
 
     let tx = conn.transaction()?;
     let mut planned = Vec::with_capacity(input.lines.len());
@@ -342,17 +352,31 @@ pub fn create_return(conn: &mut Connection, auth: &Auth, user: &User, input: &Re
         refund_total += refund;
         planned.push((l, row, refund, base_qty));
     }
-    // Rounding must never refund more than the customer paid.
+    // Rounding must never refund more than the customer paid, and the last
+    // item back settles exactly what is left of the bill.
     let already = refunded_so_far(&tx, &input.sale_id)?;
-    if already + refund_total > sale_total {
-        let over = already + refund_total - sale_total;
-        refund_total -= over;
+    let returning: i64 = planned.iter().map(|p| p.0.qty).sum();
+    let qty_left: i64 = tx.query_row(
+        "SELECT COALESCE(SUM(l.qty), 0) - COALESCE((SELECT SUM(rl.qty) FROM return_lines rl
+                JOIN sale_lines x ON x.id = rl.sale_line_id WHERE x.sale_id = ?1), 0)
+         FROM sale_lines l WHERE l.sale_id = ?1",
+        [&input.sale_id],
+        |r| r.get(0),
+    )?;
+    let target = if qty_left == returning { Some(sale_total - already) } else { None };
+    let fix = match target {
+        Some(t) => t - refund_total,
+        None => (sale_total - already - refund_total).min(0),
+    };
+    if fix != 0 {
+        refund_total += fix;
         if let Some(last) = planned.last_mut() {
-            last.2 -= over;
+            last.2 = (last.2 + fix).max(0);
         }
     }
 
-    if refund_total > rules.refund_approval_above && !approved {
+    // Splitting a refund into small returns doesn't get round the manager PIN.
+    if already + refund_total > rules.refund_approval_above && refund_total > 0 && !approved {
         return Err(AppError::ApprovalRequired(format!(
             "Refunds above Rs {} need a manager PIN.",
             sales::fmt_rs(rules.refund_approval_above)
@@ -363,6 +387,10 @@ pub fn create_return(conn: &mut Connection, auth: &Auth, user: &User, input: &Re
     let shift_id: Option<String> = tx
         .query_row("SELECT id FROM shifts WHERE till_code = ?1 AND status = 'open'", [&input.till_code], |r| r.get(0))
         .optional()?;
+    if shift_id.is_none() {
+        return Err(AppError::Conflict(format!("Till {} has no open shift. Start a shift first.", input.till_code))
+            .because("shift.none", json!({ "till": input.till_code })));
+    }
     let return_id = db::new_id();
     let return_no = next_return_no(&tx, &store_code, &input.till_code)?;
     let now = db::now();

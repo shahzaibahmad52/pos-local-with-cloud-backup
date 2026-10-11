@@ -57,12 +57,12 @@ export interface Totals {
   itemCount: number;
 }
 
-export function cartTotals(lines: CartLine[], discountBp: number): Totals {
+export function cartTotals(lines: CartLine[], discountBp: number, weightRoundTo = 100): Totals {
   let subtotal = 0;
   let lineTax = 0;
   let itemCount = 0;
   for (const line of lines) {
-    const p = priceLine(line);
+    const p = priceLine(line, weightRoundTo);
     subtotal += p.total;
     lineTax += p.tax;
     itemCount += line.kind === 'unit' ? line.qty : 1;

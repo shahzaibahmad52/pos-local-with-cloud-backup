@@ -214,7 +214,7 @@ export function Inventory({
                     </td>
                     <td className="small ltr">{r.rack ?? '—'}</td>
                     <td>
-                      <span className="mono small">{formatStock(r.stockBase, r.sellMode, r.baseUnit, r.units)}</span>{' '}
+                      <span className="mono small">{ltr(formatStock(r.stockBase, r.sellMode, r.baseUnit, r.units))}</span>{' '}
                       {r.low && <span className="tag tag-bad">{t('chipLow')}</span>}{' '}
                       {r.expiredBase > 0 && <span className="tag tag-bad">{t('expiredChip')}</span>}
                     </td>
@@ -333,7 +333,7 @@ function ProductPanel({ d, onEdit, onAdjust }: { d: ProductDetail; onEdit: () =>
                 {b.prices.length > 0 && ` · ${b.prices.map(([uid, p]) => `${unitName(uid)} ${formatAmount(p)}`).join(', ')}`}
               </span>
             </div>
-            <span className={`small mono ${b.expired ? 'tag tag-bad' : ''}`}>{formatStock(b.qtyOnHand, d.sellMode, d.baseUnit, d.units)}</span>
+            <span className={`small mono ${b.expired ? 'tag tag-bad' : ''}`}>{ltr(formatStock(b.qtyOnHand, d.sellMode, d.baseUnit, d.units))}</span>
             <button type="button" className="btn" style={{ height: 34, padding: '0 10px', fontSize: 13 }} onClick={() => onAdjust(b)}>
               {t('correctStock')}
             </button>
@@ -344,7 +344,7 @@ function ProductPanel({ d, onEdit, onAdjust }: { d: ProductDetail; onEdit: () =>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <div className="stat">
           <span>{t('reorderLevel')}</span>
-          <span className="mono">{d.reorderLevel ? formatStock(d.reorderLevel, d.sellMode, d.baseUnit, d.units) : '—'}</span>
+          <span className="mono">{d.reorderLevel ? ltr(formatStock(d.reorderLevel, d.sellMode, d.baseUnit, d.units)) : '—'}</span>
         </div>
         <div className="stat">
           <span>{t('margin')}</span>

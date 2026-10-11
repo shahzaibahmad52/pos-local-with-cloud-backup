@@ -300,6 +300,7 @@ function PayDialog({
 function OpeningDialog({ supplier, onClose, onSaved }: { supplier: Supplier; onClose: () => void; onSaved: (s: Supplier) => void }) {
   const { t, lang } = useI18n();
   const [amount, setAmount] = useState('');
+  const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const paisa = parseRupees(amount);
@@ -323,14 +324,18 @@ function OpeningDialog({ supplier, onClose, onSaved }: { supplier: Supplier; onC
           type="button"
           className="btn btn-primary"
           style={{ flex: 2 }}
-          disabled={!paisa}
-          onClick={() =>
-            paisa &&
+          disabled={!paisa || busy}
+          onClick={() => {
+            if (!paisa || busy) return;
+            setBusy(true);
             api
               .supplierOpening(supplier.id, paisa, note.trim() || undefined)
               .then(onSaved)
-              .catch((e) => setError(describeError(e, lang)))
-          }
+              .catch((e) => {
+                setError(describeError(e, lang));
+                setBusy(false);
+              });
+          }}
         >
           {t('save')}
         </button>

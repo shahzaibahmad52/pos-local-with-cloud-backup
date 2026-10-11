@@ -31,6 +31,7 @@ fn user(conn: &Connection, name: &str) -> User {
 fn demo() -> Arc<Mutex<Connection>> {
     let mut conn = db::open_in_memory().unwrap();
     seed::demo(&mut conn).unwrap();
+    common::ensure_shift(&conn);
     Arc::new(Mutex::new(conn))
 }
 

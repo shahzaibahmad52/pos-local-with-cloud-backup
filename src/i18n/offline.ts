@@ -13,6 +13,7 @@ export const offEn = {
   offQueueBlocks: 'Wait until the offline sales are sent before closing the shift or signing out.',
   offReceiptNote: 'Saved on this till; it will be sent to the main PC when the network is back.',
   offCopyAge: 'Product list from {time}',
+  offSignInAgain: 'The main PC needs you to sign in again before it takes the {n} offline sales. They are kept safe on this till: sign out and sign back in.',
 };
 
 export const offUr: Record<keyof typeof offEn, string> = {
@@ -28,4 +29,5 @@ export const offUr: Record<keyof typeof offEn, string> = {
   offQueueBlocks: 'شفٹ بند کرنے یا سائن آؤٹ سے پہلے آف لائن سیل بھیجے جانے کا انتظار کریں۔',
   offReceiptNote: 'اس ٹل پر محفوظ ہے؛ نیٹ ورک واپس آنے پر مین کمپیوٹر کو بھیج دی جائے گی۔',
   offCopyAge: 'پروڈکٹ لسٹ {time} کی',
+  offSignInAgain: 'مین کمپیوٹر {n} آف لائن سیل لینے سے پہلے دوبارہ سائن اِن چاہتا ہے۔ یہ اس ٹل پر محفوظ ہیں: سائن آؤٹ کر کے دوبارہ سائن اِن کریں۔',
 };

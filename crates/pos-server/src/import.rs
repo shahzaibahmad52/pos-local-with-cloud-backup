@@ -195,6 +195,10 @@ fn plan_row(conn: &Connection, r: &ImportRow) -> Result<Plan, String> {
         (Some((a, other)), Some(b)) if a != b => {
             return Err(format!("Barcode {} is already used by \"{other}\".", barcode.unwrap_or_default()))
         }
+        // A new name with a barcode that is already on a product is most likely a mistake in the sheet.
+        (Some((_, other)), None) => {
+            return Err(format!("Barcode {} is already used by \"{other}\".", barcode.unwrap_or_default()))
+        }
         (Some((a, _)), _) => Some(a),
         (None, b) => b,
     };
@@ -219,6 +223,23 @@ fn plan_row(conn: &Connection, r: &ImportRow) -> Result<Plan, String> {
             .map_err(|e| e.to_string())?;
         if mode != product.sell_mode {
             return Err("Already exists, sold a different way (pack vs weight). Change it on the product page.".into());
+        }
+        // Only prices are updated; a pack holding a different number than the sheet says is flagged.
+        for u in &product.units {
+            let have: Option<i64> = conn
+                .query_row(
+                    "SELECT base_qty FROM product_units WHERE product_id = ?1 AND name = ?2 COLLATE NOCASE",
+                    params![id, u.name],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(|e| e.to_string())?;
+            if let Some(q) = have.filter(|q| *q != u.base_qty) {
+                return Err(format!(
+                    "{} holds {q} in the store but {} in the sheet. Change the pack on the product page.",
+                    u.name, u.base_qty
+                ));
+            }
         }
         return Ok(Plan::Update { id, product, base_sellable: r.base_sellable.unwrap_or(true) });
     }

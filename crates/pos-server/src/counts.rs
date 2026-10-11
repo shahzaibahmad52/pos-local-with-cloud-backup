@@ -260,10 +260,14 @@ pub fn set_line(conn: &Connection, count_id: &str, line_id: &str, input: &LineIn
         }
     }
     let n = conn.execute(
-        "UPDATE stock_count_lines SET counted_qty = ?1,
+        // A new count is a new look at the shelf, so the system quantity is
+        // taken again at that moment; changing only the reason keeps both.
+        "UPDATE stock_count_lines SET
             system_qty = CASE WHEN ?1 IS NULL THEN NULL
-                              ELSE COALESCE(system_qty, (SELECT qty_on_hand FROM batches WHERE id = batch_id)) END,
-            counted_at = CASE WHEN ?1 IS NULL THEN NULL ELSE COALESCE(counted_at, ?2) END,
+                              WHEN counted_qty IS ?1 THEN system_qty
+                              ELSE (SELECT qty_on_hand FROM batches WHERE id = batch_id) END,
+            counted_at = CASE WHEN ?1 IS NULL THEN NULL WHEN counted_qty IS ?1 THEN counted_at ELSE ?2 END,
+            counted_qty = ?1,
             reason = ?3
          WHERE id = ?4 AND count_id = ?5",
         params![input.counted, db::now(), input.reason.as_deref().filter(|r| !r.is_empty()), line_id, count_id],

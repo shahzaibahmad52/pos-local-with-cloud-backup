@@ -65,7 +65,9 @@ impl AppState {
     }
 
     fn db(&self) -> AppResult<MutexGuard<'_, Connection>> {
-        self.db.lock().map_err(|_| AppError::Internal("database lock poisoned".into()))
+        // A request that panicked had its transaction rolled back, so the
+        // connection is still sound; carry on rather than failing every request after.
+        Ok(self.db.lock().unwrap_or_else(std::sync::PoisonError::into_inner))
     }
 }
 

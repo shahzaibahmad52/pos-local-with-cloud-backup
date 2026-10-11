@@ -181,8 +181,8 @@ fn product_sales(conn: &Connection, from: &str, to: &str) -> AppResult<HashMap<S
     let mut out: HashMap<String, ProductSales> = HashMap::new();
     let mut stmt = conn.prepare(
         "SELECT l.product_id, SUM(l.base_qty),
-                SUM(CASE WHEN s.subtotal > 0 THEN l.line_total * s.total / s.subtotal ELSE 0 END),
-                SUM(CASE WHEN s.subtotal > 0 THEN l.tax_included * s.total / s.subtotal ELSE 0 END),
+                SUM(CASE WHEN s.subtotal > 0 THEN (2 * l.line_total * s.total + s.subtotal) / (2 * s.subtotal) ELSE 0 END),
+                SUM(CASE WHEN s.subtotal > 0 THEN (2 * l.tax_included * s.total + s.subtotal) / (2 * s.subtotal) ELSE 0 END),
                 SUM(l.cost_total)
          FROM sale_lines l JOIN sales s ON s.id = l.sale_id
          WHERE s.status = 'completed' AND substr(s.created_at, 1, 10) BETWEEN ?1 AND ?2
@@ -709,18 +709,22 @@ fn cash_book(conn: &Connection, from: &str, to: &str, r: &mut Report) -> AppResu
         col("cash_out", "money"),
         col("user", "text"),
     ];
-    // Opening floats, cash sales and refunds per shift, plus every cash in/out.
+    // Opening floats, cash sales and refunds per shift and day (a late shift
+    // runs past midnight), plus every cash in/out.
     let mut stmt = conn.prepare(
         "SELECT * FROM (
            SELECT h.opened_at AS at, h.till_code, 'opening' AS what, NULL AS reason, h.opening_cash AS cin, 0 AS cout, u.name
              FROM shifts h JOIN users u ON u.id = h.user_id
            UNION ALL
            SELECT MAX(s.created_at), s.till_code, 'cash_sales', NULL, SUM(p.amount), 0, u.name
-             FROM payments p JOIN sales s ON s.id = p.sale_id JOIN shifts h ON h.id = s.shift_id JOIN users u ON u.id = h.user_id
-             WHERE p.method = 'cash' AND s.status = 'completed' GROUP BY s.shift_id
+             FROM payments p JOIN sales s ON s.id = p.sale_id LEFT JOIN shifts h ON h.id = s.shift_id
+             JOIN users u ON u.id = COALESCE(h.user_id, s.user_id)
+             WHERE p.method = 'cash' AND s.status = 'completed'
+             GROUP BY s.shift_id, s.till_code, substr(s.created_at, 1, 10)
            UNION ALL
            SELECT MAX(x.created_at), x.till_code, 'cash_refunds', NULL, 0, SUM(x.refund_total), u.name
-             FROM returns x JOIN users u ON u.id = x.user_id WHERE x.refund_method = 'cash' GROUP BY x.shift_id
+             FROM returns x JOIN users u ON u.id = x.user_id WHERE x.refund_method = 'cash'
+             GROUP BY x.shift_id, x.till_code, substr(x.created_at, 1, 10)
            UNION ALL
            SELECT m.created_at, h.till_code, 'move', m.reason,
                   CASE WHEN m.kind = 'in' THEN m.amount ELSE 0 END, CASE WHEN m.kind = 'out' THEN m.amount ELSE 0 END, u.name
@@ -1038,11 +1042,11 @@ fn sales_tax(conn: &Connection, from: &str, to: &str, r: &mut Report) -> AppResu
     // Grouped by each product's current tax rate, net of refunds.
     let mut stmt = conn.prepare(
         "SELECT p.tax_rate_bp,
-           (SELECT COALESCE(SUM(CASE WHEN s.subtotal > 0 THEN l.line_total * s.total / s.subtotal ELSE 0 END), 0)
+           (SELECT COALESCE(SUM(CASE WHEN s.subtotal > 0 THEN (2 * l.line_total * s.total + s.subtotal) / (2 * s.subtotal) ELSE 0 END), 0)
               FROM sale_lines l JOIN sales s ON s.id = l.sale_id JOIN products q ON q.id = l.product_id
               WHERE q.tax_rate_bp = p.tax_rate_bp AND s.status = 'completed'
                 AND substr(s.created_at, 1, 10) BETWEEN ?1 AND ?2),
-           (SELECT COALESCE(SUM(CASE WHEN s.subtotal > 0 THEN l.tax_included * s.total / s.subtotal ELSE 0 END), 0)
+           (SELECT COALESCE(SUM(CASE WHEN s.subtotal > 0 THEN (2 * l.tax_included * s.total + s.subtotal) / (2 * s.subtotal) ELSE 0 END), 0)
               FROM sale_lines l JOIN sales s ON s.id = l.sale_id JOIN products q ON q.id = l.product_id
               WHERE q.tax_rate_bp = p.tax_rate_bp AND s.status = 'completed'
                 AND substr(s.created_at, 1, 10) BETWEEN ?1 AND ?2),

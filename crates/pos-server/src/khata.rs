@@ -100,7 +100,8 @@ fn account(conn: &Connection, id: &str) -> AppResult<Option<Account>> {
         .flatten();
     let today = ledger::today();
     a.age_days = ledger::open_charges(&list).first().map(|o| ledger::days_between(&o.date, &today)).unwrap_or(0);
-    a.overdue = a.balance > 0 && a.age_days >= OVERDUE_DAYS;
+    // Overdue once past the ageing report's first bucket (0–30 days).
+    a.overdue = a.balance > 0 && a.age_days > OVERDUE_DAYS;
     Ok(Some(a))
 }
 
@@ -229,7 +230,7 @@ pub fn receive_payment(
     customer_id: &str,
     input: &PaymentInput,
 ) -> AppResult<PaymentSlip> {
-    if input.amount <= 0 {
+    if input.amount <= 0 || input.amount > crate::pricing::MAX_AMOUNT {
         return Err(AppError::BadRequest("Amount must be above 0.".into()));
     }
     if !PAYMENT_METHODS.contains(&input.method.as_str()) {
@@ -289,7 +290,7 @@ pub struct OpeningInput {
 
 /// Carries over what a customer already owed in the paper register.
 pub fn add_opening(conn: &Connection, user: &User, customer_id: &str, input: &OpeningInput) -> AppResult<Account> {
-    if input.amount <= 0 {
+    if input.amount <= 0 || input.amount > crate::pricing::MAX_AMOUNT {
         return Err(AppError::BadRequest("Amount must be above 0.".into()));
     }
     let name: String = conn

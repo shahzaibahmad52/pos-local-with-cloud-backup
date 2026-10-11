@@ -58,7 +58,7 @@ pub fn add(conn: &mut Connection, user: &User, input: &ExpenseInput) -> AppResul
     if category.is_empty() {
         return Err(AppError::BadRequest("Choose a category.".into()));
     }
-    if input.amount <= 0 {
+    if input.amount <= 0 || input.amount > crate::pricing::MAX_AMOUNT {
         return Err(AppError::BadRequest("Amount must be above 0.".into()));
     }
     if !ledger::valid_date(&input.date) {

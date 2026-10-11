@@ -92,7 +92,7 @@ async fn background(state: AppState) {
             if cloud::backup::due(&dir) {
                 let db = db.clone();
                 let result = tokio::task::spawn_blocking(move || {
-                    let conn = db.lock().map_err(|_| "database lock poisoned".to_string())?;
+                    let conn = db.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                     cloud::backup::backup_now(&conn, &dir).map_err(|e| e.to_string())
                 })
                 .await;

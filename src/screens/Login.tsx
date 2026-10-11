@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, ApiError, setToken } from '../api/client';
+import { api, setToken } from '../api/client';
 import type { Language, LoginTile, StoreHeader, User } from '../api/types';
 import { BrandMark, LanguageToggle } from '../components/common';
 import { PinPad } from '../components/PinPad';
@@ -35,7 +35,7 @@ export function Login({
         setSelected(first);
         if (first) setLang(first.language);
       })
-      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
+      .catch((e) => setError(describeError(e, lang)));
   }, [setLang]);
 
   const pick = (tile: LoginTile) => {
@@ -66,7 +66,7 @@ export function Login({
       }
       onSignedIn(user);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
+      setError(describeError(e, lang));
       setPin('');
       setBusy(false);
     }

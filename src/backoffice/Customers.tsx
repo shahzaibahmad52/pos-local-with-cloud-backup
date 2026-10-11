@@ -487,6 +487,7 @@ function CustomerDialog({ account, onClose, onSaved }: { account: KhataAccount |
 function OpeningDialog({ account, onClose, onSaved }: { account: KhataAccount; onClose: () => void; onSaved: () => void }) {
   const { t, lang } = useI18n();
   const [amount, setAmount] = useState('');
+  const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const paisa = parseRupees(amount);
@@ -510,14 +511,18 @@ function OpeningDialog({ account, onClose, onSaved }: { account: KhataAccount; o
           type="button"
           className="btn btn-primary"
           style={{ flex: 2 }}
-          disabled={!paisa}
-          onClick={() =>
-            paisa &&
+          disabled={!paisa || busy}
+          onClick={() => {
+            if (!paisa || busy) return;
+            setBusy(true);
             api
               .khataOpening(account.id, paisa, note.trim() || undefined)
               .then(onSaved)
-              .catch((e) => setError(describeError(e, lang)))
-          }
+              .catch((e) => {
+                setError(describeError(e, lang));
+                setBusy(false);
+              });
+          }}
         >
           {t('save')}
         </button>

@@ -22,8 +22,9 @@ use crate::{
     error::{AppError, AppResult},
 };
 
-/// Settings that stay on this PC: the cloud token and other stores' tokens.
-const PRIVATE_SETTINGS: &[&str] = &["cloud\\_%", "hq\\_%"];
+/// Settings that stay on this PC: the cloud token, other stores' tokens and
+/// the FBR token (anyone with a read-only head-office token could read it).
+const PRIVATE_SETTINGS: &[&str] = &["cloud\\_%", "hq\\_%", "fbr\\_token"];
 /// Tables that exist only on this PC.
 const LOCAL_TABLES: &[&str] = &["sync_queue", "sqlite_sequence"];
 /// Rows per upload. Each becomes one statement in a single transaction.
@@ -67,6 +68,13 @@ pub fn ensure_tracking(conn: &Connection) -> rusqlite::Result<()> {
         for (event, row) in [("INSERT", "NEW"), ("UPDATE", "NEW"), ("DELETE", "OLD")] {
             let keys = pk.iter().map(|c| format!("{row}.{}", quote(c))).collect::<Vec<_>>().join(", ");
             let extra = if table == "settings" { private_filter(row) } else { String::new() };
+            if table == "settings" {
+                // Rebuilt each start, so a longer private list reaches existing databases.
+                conn.execute_batch(&format!(
+                    "DROP TRIGGER IF EXISTS {}",
+                    quote(&format!("_sync_{}_{}", table, event.to_lowercase()))
+                ))?;
+            }
             conn.execute_batch(&format!(
                 "CREATE TRIGGER IF NOT EXISTS {trigger} AFTER {event} ON {t} WHEN {enabled}{extra}
                  BEGIN INSERT INTO sync_queue (tbl, pk) VALUES ('{table}', json_array({keys})); END;",
@@ -268,7 +276,7 @@ fn store_identity(conn: &Connection) -> AppResult<(String, String)> {
 }
 
 fn lock(db: &Mutex<Connection>) -> AppResult<std::sync::MutexGuard<'_, Connection>> {
-    db.lock().map_err(|_| AppError::Internal("database lock poisoned".into()))
+    Ok(db.lock().unwrap_or_else(std::sync::PoisonError::into_inner))
 }
 
 /// Uploads everything waiting. Returns how many changes went up.

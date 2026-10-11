@@ -3,8 +3,8 @@
 export const opsEn = {
   stockCount: 'Stock count',
   branchTransfers: 'Branch transfers',
-  countTitle: 'Stock count',
-  countHelp: 'Count one shelf at a time. Selling carries on: each batch’s system stock is noted when you count it, so sales made later are kept.',
+  scTitle: 'Stock count',
+  scHelp: 'Count one shelf at a time. Selling carries on: each batch’s system stock is noted when you count it, so sales made later are kept.',
   countStart: 'Start counting',
   countWhat: 'What to count',
   countWhole: 'Whole shop',
@@ -77,8 +77,8 @@ export const opsEn = {
 export const opsUr: Record<keyof typeof opsEn, string> = {
   stockCount: 'اسٹاک گنتی',
   branchTransfers: 'برانچ منتقلی',
-  countTitle: 'اسٹاک گنتی',
-  countHelp: 'ایک وقت میں ایک شیلف گنیں۔ سیل جاری رہتی ہے: گنتے وقت ہر بیچ کا سسٹم اسٹاک نوٹ ہوتا ہے، اس لیے بعد کی سیل محفوظ رہتی ہے۔',
+  scTitle: 'اسٹاک گنتی',
+  scHelp: 'ایک وقت میں ایک شیلف گنیں۔ سیل جاری رہتی ہے: گنتے وقت ہر بیچ کا سسٹم اسٹاک نوٹ ہوتا ہے، اس لیے بعد کی سیل محفوظ رہتی ہے۔',
   countStart: 'گنتی شروع کریں',
   countWhat: 'کیا گننا ہے',
   countWhole: 'پوری دکان',

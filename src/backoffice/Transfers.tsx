@@ -3,6 +3,7 @@ import { api } from '../api/client';
 import type { BatchDetail, Product, ProductDetail, StoreHeader, TransferNote, TransferRow, TransferView } from '../api/types';
 import { SearchIcon, TrashIcon } from '../components/common';
 import { formatMonth } from '../domain/dates';
+import { ltr } from '../domain/money';
 import { countingUnit, formatStock } from '../domain/stock';
 import { describeError } from '../i18n/errors';
 import { useI18n } from '../i18n/i18n';
@@ -420,7 +421,7 @@ function SendForm({ stores, onSent }: { stores: { id: string; code: string; name
                           .map((b) => (
                             <option key={b.id} value={b.id}>
                               {b.batchNo}
-                              {b.expiry ? ` · ${formatMonth(b.expiry)}` : ''} · {formatStock(b.qtyOnHand, l.product.sellMode, l.product.baseUnit, l.product.units)}
+                              {b.expiry ? ` · ${formatMonth(b.expiry)}` : ''} · {ltr(formatStock(b.qtyOnHand, l.product.sellMode, l.product.baseUnit, l.product.units))}
                             </option>
                           ))}
                       </select>

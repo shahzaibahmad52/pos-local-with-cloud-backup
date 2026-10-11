@@ -1,6 +1,8 @@
 //! Backoffice: purchases and supplier payables, expenses, khata, product
 //! editing, Excel import, the dashboard and the recovery code.
 
+mod common;
+
 use std::collections::BTreeMap;
 
 use pos_server::{
@@ -400,6 +402,7 @@ fn excel_import_previews_then_saves() {
 #[test]
 fn dashboard_profit_after_sale_return_and_expense() {
     let mut conn = store_db();
+    common::ensure_shift(&conn);
     let owner = user(&conn, "Owner");
     let panadol = product(&conn, "Panadol");
     let sale = sales::create_sale(

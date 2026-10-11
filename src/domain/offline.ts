@@ -20,6 +20,8 @@ export interface RefusedSale {
   total: number;
   reason: string;
   at: string;
+  /** The sale itself, so nothing is lost. */
+  sale?: QueuedSale;
 }
 
 export const OFFLINE_METHODS: PaymentMethod[] = ['cash', 'card', 'jazzcash', 'easypaisa'];
@@ -78,7 +80,7 @@ export function buildOfflineSale(args: {
   customer: { id: string; name: string } | null;
   weightRoundTo: number;
 }): QueuedSale {
-  const totals = cartTotals(args.lines, args.discountBp);
+  const totals = cartTotals(args.lines, args.discountBp, args.weightRoundTo);
   const priced = args.lines.map((l) => priceLine(l, args.weightRoundTo));
   const changeDue = args.method === 'cash' ? Math.max(0, args.tendered - totals.total) : 0;
   // Cash is recorded as what stayed in the drawer.

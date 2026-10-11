@@ -174,8 +174,16 @@ pub fn open_shift(conn: &Connection, user: &User, till_code: &str, opening_cash:
     if let Some(existing) = open_shift_for(conn, till_code)? {
         return Ok(existing);
     }
-    if opening_cash < 0 {
-        return Err(AppError::BadRequest("Opening cash can't be negative.".into()));
+    if !(0..=crate::pricing::MAX_AMOUNT).contains(&opening_cash) {
+        return Err(AppError::BadRequest("Check the opening cash.".into()));
+    }
+    // Till codes are printed on receipts and looked up again for returns: T01, not " t01".
+    let valid = !till_code.is_empty()
+        && till_code.len() <= 10
+        && till_code.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit());
+    if !valid {
+        return Err(AppError::BadRequest("A till code is capital letters and digits, e.g. T01.".into())
+            .because("till.bad_code", json!({})));
     }
     let id = db::new_id();
     conn.execute(
