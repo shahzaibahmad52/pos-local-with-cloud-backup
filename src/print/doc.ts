@@ -3,7 +3,7 @@
 // into the 1-bit image sent to the thermal printer (raster.ts), so the
 // preview and the paper always match.
 
-import type { KhataPaymentSlip, KhataStatement, Receipt, ReceiptLanguage, ReturnSlip, ShiftSummary, StoreHeader } from '../api/types';
+import type { KhataPaymentSlip, KhataStatement, Receipt, ReceiptLanguage, ReturnSlip, ShiftSummary, StoreHeader, TransferView } from '../api/types';
 import { formatAmount, formatGrams } from '../domain/money';
 
 export type Block =
@@ -92,6 +92,13 @@ const L = {
   creditLimit: ['Credit limit', 'اُدھار کی حد'],
   printed: ['Printed', 'پرنٹ'],
   recoveryTitle: ['OWNER RECOVERY CODE', 'مالک کا ریکوری کوڈ'],
+  transferTitle: ['STOCK TRANSFER', 'اسٹاک منتقلی'],
+  transferTo: ['To branch', 'برانچ کو'],
+  transferFrom: ['From branch', 'برانچ سے'],
+  sentQty: ['Sent', 'بھیجا'],
+  receivedQty: ['Received', 'وصول'],
+  carriedBy: ['Carried by', 'لے جانے والا'],
+  signature: ['Received by (sign)', 'وصول کنندہ (دستخط)'],
   recoveryHelp: [
     'Keep this safe. On the main PC, choose the owner on the sign-in screen, then "Forgot password?". Works once.',
     'اسے محفوظ رکھیں۔ مین PC پر سائن اِن اسکرین پر مالک کو چنیں، پھر "پاس ورڈ بھول گئے؟"۔ ایک بار چلتا ہے۔',
@@ -324,4 +331,26 @@ export function recoveryCodeDoc(store: StoreHeader, code: string, lang: ReceiptL
       { kind: 'center', text: formatDateTime(new Date().toISOString()), small: true, ltr: true },
     ],
   };
+}
+
+/** Slip that travels with the goods (sender) or is kept (receiver). */
+export function transferDoc(tr: TransferView, store: StoreHeader, lang: ReceiptLanguage): Doc {
+  const t = make(lang);
+  const b: Block[] = [
+    ...storeHeader(store),
+    { kind: 'center', text: t('transferTitle'), bold: true },
+    { kind: 'row', label: '#', value: tr.transferNo, bold: true },
+    { kind: 'row', label: tr.direction === 'out' ? t('transferTo') : t('transferFrom'), value: `${tr.otherName ?? ''} ${tr.otherCode}`.trim() },
+    { kind: 'row', label: t('date'), value: formatDateTime(tr.createdAt) },
+  ];
+  if (tr.note) b.push({ kind: 'row', label: t('carriedBy'), value: tr.note });
+  b.push({ kind: 'rule' });
+  for (const l of tr.lines) {
+    b.push({ kind: 'text', text: l.productName, bold: true, ltr: true });
+    const qty = tr.direction === 'in' ? `${l.receivedQty ?? 0} / ${l.sentQty}` : String(l.sentQty);
+    b.push({ kind: 'row', label: `B:${l.batchNo}${l.expiry ? ` · ${l.expiry}` : ''}`, value: `${qty} ${l.baseUnit}` });
+  }
+  b.push({ kind: 'rule' });
+  b.push({ kind: 'text', text: `${t('signature')}: ____________` });
+  return { ...docDir(lang), blocks: b };
 }

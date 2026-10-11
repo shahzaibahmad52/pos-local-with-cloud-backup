@@ -1,6 +1,12 @@
 import type {
   ActivityEntry,
   CloudPage,
+  CountHead,
+  CountView,
+  RackProgress,
+  TransferNote,
+  TransferRow,
+  TransferView,
   Report,
   StoreFigures,
   AdjustReason,
@@ -225,5 +231,20 @@ export const api = {
   addHqStore: (input: { url: string; token: string; name?: string }) => request<{ ok: boolean }>('POST', '/api/hq/stores', input),
   report: (name: string, from: string, to: string, n?: number) =>
     request<Report>('GET', `/api/reports/${id(name)}?${q({ from, to, n })}`),
+  counts: () => request<{ counts: CountHead[]; racks: RackProgress[] }>('GET', '/api/counts'),
+  startCount: (input: { section?: string; noRack?: boolean; blind: boolean }) => request<CountView>('POST', '/api/counts', input),
+  count: (countId: string) => request<CountView>('GET', `/api/counts/${id(countId)}`),
+  setCountLine: (countId: string, lineId: string, counted: number | null, reason?: string) =>
+    request<CountView>('PUT', `/api/counts/${id(countId)}/lines/${id(lineId)}`, { counted, reason }),
+  addCountProduct: (countId: string, productId: string) => request<CountView>('POST', `/api/counts/${id(countId)}/products`, { productId }),
+  applyCount: (countId: string) => request<CountView>('POST', `/api/counts/${id(countId)}/apply`),
+  cancelCount: (countId: string) => request<CountView>('POST', `/api/counts/${id(countId)}/cancel`),
+  transfers: () => request<{ transfers: TransferRow[]; stores: { id: string; code: string; name: string }[] }>('GET', '/api/transfers'),
+  transfer: (transferId: string) => request<TransferView>('GET', `/api/transfers/${id(transferId)}`),
+  sendTransfer: (input: { toCode: string; toName?: string; note?: string; lines: { batchId: string; qty: number }[] }) =>
+    request<TransferView>('POST', '/api/transfers', input),
+  incomingTransfers: () => request<{ notes: TransferNote[]; errors: [string, string][] }>('GET', '/api/transfers/incoming'),
+  receiveTransfer: (note: TransferNote, received: { qty: number; reason?: string }[]) =>
+    request<TransferView>('POST', '/api/transfers/receive', { note, received }),
   removeHqStore: (storeId: string) => request<{ ok: boolean }>('DELETE', `/api/hq/stores/${id(storeId)}`),
 };

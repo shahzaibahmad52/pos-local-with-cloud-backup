@@ -297,8 +297,8 @@ fn next_purchase_no(tx: &Transaction) -> AppResult<String> {
 
 /// Adds stock to the batch with this number and expiry, or starts a new
 /// batch. Receiving more of an existing batch averages its cost.
-fn add_to_batch(
-    tx: &Transaction,
+pub fn add_to_batch(
+    tx: &Connection,
     product_id: &str,
     batch_no: &str,
     expiry: Option<&str>,

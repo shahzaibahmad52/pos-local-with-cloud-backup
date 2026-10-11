@@ -660,3 +660,98 @@ export interface Report {
   totals: Record<string, number> | null;
   lines: ReportLine[];
 }
+
+// ---- Stock counts and transfers ----
+
+export interface RackProgress {
+  rack: string | null;
+  lines: number;
+  counted: number;
+}
+
+export interface CountHead {
+  id: string;
+  countNo: string;
+  section: string | null;
+  blind: boolean;
+  status: 'open' | 'applied' | 'cancelled';
+  startedBy: string;
+  startedAt: string;
+  finishedAt: string | null;
+  lines: number;
+  counted: number;
+}
+
+export interface CountLine {
+  id: string;
+  productId: string;
+  productName: string;
+  rack: string | null;
+  sellMode: 'unit' | 'weight';
+  baseUnit: string;
+  units: UnitPrice[];
+  batchNo: string;
+  expiry: string | null;
+  systemQty: number | null;
+  countedQty: number | null;
+  difference: number | null;
+  costPerBase: number;
+  reason: string | null;
+}
+
+export interface CountView extends CountHead {
+  items: CountLine[];
+  shortValue: number;
+  extraValue: number;
+  racks: RackProgress[];
+}
+
+export interface TransferNoteLine {
+  productName: string;
+  sellMode: 'unit' | 'weight';
+  baseUnit: string;
+  units: { name: string; nameUr: string | null; baseQty: number; price: number }[];
+  batchNo: string;
+  expiry: string | null;
+  qty: number;
+  coldChain: boolean;
+}
+
+export interface TransferNote {
+  kind: string;
+  transferId: string;
+  transferNo: string;
+  fromCode: string;
+  fromName: string;
+  toCode: string;
+  sentAt: string;
+  sentBy: string;
+  note: string | null;
+  lines: TransferNoteLine[];
+}
+
+export interface TransferRow {
+  id: string;
+  transferNo: string;
+  direction: 'out' | 'in';
+  otherCode: string;
+  otherName: string | null;
+  status: 'sent' | 'received';
+  createdAt: string;
+  lines: number;
+  differences: number;
+}
+
+export interface TransferView {
+  id: string;
+  transferNo: string;
+  direction: 'out' | 'in';
+  otherCode: string;
+  otherName: string | null;
+  status: 'sent' | 'received';
+  note: string | null;
+  userName: string;
+  createdAt: string;
+  lines: { productName: string; batchNo: string; expiry: string | null; sentQty: number; receivedQty: number | null; baseUnit: string; reason: string | null }[];
+  payload: TransferNote | null;
+}

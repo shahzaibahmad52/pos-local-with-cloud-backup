@@ -285,7 +285,7 @@ fn profit_loss(conn: &Connection, from: &str, to: &str, r: &mut Report) -> AppRe
     // Stock thrown away or found in corrections (damaged, expired, recount), at cost.
     let written_off: i64 = conn.query_row(
         "SELECT COALESCE(SUM(-m.qty_delta * b.cost_per_base), 0) FROM stock_moves m JOIN batches b ON b.id = m.batch_id
-         WHERE m.reason = 'adjust' AND substr(m.created_at, 1, 10) BETWEEN ?1 AND ?2",
+         WHERE m.reason IN ('adjust', 'count') AND substr(m.created_at, 1, 10) BETWEEN ?1 AND ?2",
         params![from, to],
         |r| r.get(0),
     )?;

@@ -173,3 +173,64 @@ pub async fn overview(db: &Mutex<Connection>, cloud: &Cloud, from: &str, to: &st
     }
     Ok(out)
 }
+
+/// Other stores added to the All stores list (no tokens), e.g. to choose
+/// where a transfer goes.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KnownStore {
+    pub id: String,
+    pub code: String,
+    pub name: String,
+}
+
+pub fn known_stores(conn: &Connection) -> AppResult<Vec<KnownStore>> {
+    Ok(load(conn)?.into_iter().map(|s| KnownStore { id: s.id, code: s.code, name: s.name }).collect())
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Incoming {
+    pub notes: Vec<crate::transfers::TransferNote>,
+    /// Stores whose cloud copy couldn't be read, with why.
+    pub errors: Vec<(String, String)>,
+}
+
+/// Transfers other stores have sent to this one and that haven't been
+/// received here yet, read from their cloud copies.
+pub async fn incoming_transfers(db: &Mutex<Connection>, cloud: &Cloud) -> AppResult<Incoming> {
+    let (own, stores, done) = {
+        let conn = lock(db)?;
+        let done: Vec<String> = conn
+            .prepare("SELECT source_id FROM transfers WHERE source_id IS NOT NULL")?
+            .query_map([], |r| r.get(0))?
+            .collect::<Result<_, _>>()?;
+        (sales::store_code(&conn)?, load(&conn)?, done)
+    };
+    let mut out = Incoming { notes: Vec::new(), errors: Vec::new() };
+    for s in stores {
+        let Some(base) = normalise_url(&s.url) else { continue };
+        let remote = Remote { base, token: s.token.clone() };
+        let stmt = Stmt::new(
+            "SELECT payload FROM transfers WHERE direction = 'out' AND other_code = ?1 ORDER BY created_at",
+            vec![Value::Text(own.clone())],
+        );
+        match cloud.client.query(&remote, stmt).await {
+            Ok(rows) => {
+                for row in rows.rows {
+                    if let Some(Value::Text(p)) = row.first() {
+                        if let Ok(note) = serde_json::from_str::<crate::transfers::TransferNote>(p) {
+                            if !done.contains(&note.transfer_id) {
+                                out.notes.push(note);
+                            }
+                        }
+                    }
+                }
+            }
+            // An older backup without transfers yet just has nothing to send.
+            Err(super::hrana::CloudError::Sql(m)) if m.contains("no such table") => {}
+            Err(e) => out.errors.push((s.name.clone(), e.to_string())),
+        }
+    }
+    Ok(out)
+}

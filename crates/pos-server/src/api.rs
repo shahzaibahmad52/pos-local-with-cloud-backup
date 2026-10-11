@@ -21,9 +21,10 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use crate::{
     auth::{self, Auth, User},
     cloud::{backup, hq, sync, sync::Cloud},
-    dashboard,
+    counts, dashboard,
     error::{AppError, AppResult},
     expenses, import, inventory, khata, products, purchases, reports, returns, rules, sales, settings, shifts, store,
+    transfers,
 };
 
 #[derive(Clone)]
@@ -800,6 +801,116 @@ async fn report(
     Ok(Json(reports::run(&conn, &name, &q)?))
 }
 
+#[derive(serde::Serialize)]
+struct CountsPage {
+    counts: Vec<counts::CountHead>,
+    racks: Vec<counts::RackProgress>,
+}
+
+async fn list_counts(State(s): State<AppState>, _admin: AdminUser) -> AppResult<Json<CountsPage>> {
+    let conn = s.db()?;
+    Ok(Json(CountsPage { counts: counts::list(&conn)?, racks: counts::racks(&conn)? }))
+}
+
+async fn start_count(
+    State(s): State<AppState>,
+    AdminUser(admin): AdminUser,
+    Json(input): Json<counts::StartInput>,
+) -> AppResult<Json<counts::CountView>> {
+    let mut conn = s.db()?;
+    Ok(Json(counts::start(&mut conn, &admin, &input)?))
+}
+
+async fn get_count(
+    State(s): State<AppState>,
+    _admin: AdminUser,
+    Path(id): Path<String>,
+) -> AppResult<Json<counts::CountView>> {
+    let conn = s.db()?;
+    Ok(Json(counts::view(&conn, &id)?))
+}
+
+async fn set_count_line(
+    State(s): State<AppState>,
+    _admin: AdminUser,
+    Path((id, line)): Path<(String, String)>,
+    Json(input): Json<counts::LineInput>,
+) -> AppResult<Json<counts::CountView>> {
+    let conn = s.db()?;
+    Ok(Json(counts::set_line(&conn, &id, &line, &input)?))
+}
+
+async fn add_count_product(
+    State(s): State<AppState>,
+    _admin: AdminUser,
+    Path(id): Path<String>,
+    Json(input): Json<counts::AddProduct>,
+) -> AppResult<Json<counts::CountView>> {
+    let conn = s.db()?;
+    Ok(Json(counts::add_product(&conn, &id, &input)?))
+}
+
+async fn apply_count(
+    State(s): State<AppState>,
+    AdminUser(admin): AdminUser,
+    Path(id): Path<String>,
+) -> AppResult<Json<counts::CountView>> {
+    let mut conn = s.db()?;
+    Ok(Json(counts::apply(&mut conn, &admin, &id)?))
+}
+
+async fn cancel_count(
+    State(s): State<AppState>,
+    AdminUser(admin): AdminUser,
+    Path(id): Path<String>,
+) -> AppResult<Json<counts::CountView>> {
+    let conn = s.db()?;
+    Ok(Json(counts::cancel(&conn, &admin, &id)?))
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TransfersPage {
+    transfers: Vec<transfers::TransferRow>,
+    stores: Vec<hq::KnownStore>,
+}
+
+async fn list_transfers(State(s): State<AppState>, _admin: AdminUser) -> AppResult<Json<TransfersPage>> {
+    let conn = s.db()?;
+    Ok(Json(TransfersPage { transfers: transfers::list(&conn)?, stores: hq::known_stores(&conn)? }))
+}
+
+async fn send_transfer(
+    State(s): State<AppState>,
+    AdminUser(admin): AdminUser,
+    Json(input): Json<transfers::SendInput>,
+) -> AppResult<Json<transfers::TransferView>> {
+    let mut conn = s.db()?;
+    Ok(Json(transfers::send(&mut conn, &admin, &input)?))
+}
+
+async fn get_transfer(
+    State(s): State<AppState>,
+    _admin: AdminUser,
+    Path(id): Path<String>,
+) -> AppResult<Json<transfers::TransferView>> {
+    let conn = s.db()?;
+    Ok(Json(transfers::view(&conn, &id)?))
+}
+
+async fn receive_transfer(
+    State(s): State<AppState>,
+    AdminUser(admin): AdminUser,
+    Json(input): Json<transfers::ReceiveInput>,
+) -> AppResult<Json<transfers::TransferView>> {
+    let mut conn = s.db()?;
+    Ok(Json(transfers::receive(&mut conn, &admin, &input)?))
+}
+
+async fn incoming_transfers(State(s): State<AppState>, _admin: AdminUser) -> AppResult<Json<hq::Incoming>> {
+    Ok(Json(hq::incoming_transfers(&s.db, &s.cloud).await?))
+}
+
 /// Origins allowed to call the API from a browser: the desktop app's own
 /// webview and the local development server. Tills on other PCs use the
 /// same desktop app, so their origin is the app's too.
@@ -864,6 +975,16 @@ pub fn router(state: AppState) -> Router {
         .route("/api/restore", post(restore))
         .route("/api/hq", get(hq_overview))
         .route("/api/reports/{name}", get(report))
+        .route("/api/counts", get(list_counts).post(start_count))
+        .route("/api/counts/{id}", get(get_count))
+        .route("/api/counts/{id}/lines/{line}", put(set_count_line))
+        .route("/api/counts/{id}/products", post(add_count_product))
+        .route("/api/counts/{id}/apply", post(apply_count))
+        .route("/api/counts/{id}/cancel", post(cancel_count))
+        .route("/api/transfers", get(list_transfers).post(send_transfer))
+        .route("/api/transfers/incoming", get(incoming_transfers))
+        .route("/api/transfers/receive", post(receive_transfer))
+        .route("/api/transfers/{id}", get(get_transfer))
         .route("/api/hq/stores", post(hq_add))
         .route("/api/hq/stores/{id}", delete(hq_remove))
         .route("/api/shifts/current", get(current_shift))

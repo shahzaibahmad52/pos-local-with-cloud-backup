@@ -16,6 +16,8 @@ import { ProductForm } from './ProductForm';
 import { Purchases } from './Purchases';
 import { Reports } from './Reports';
 import { Settings } from './Settings';
+import { StockCountDetail, StockCounts } from './StockCount';
+import { Transfers } from './Transfers';
 
 export type Page =
   | { name: 'dashboard' }
@@ -23,6 +25,9 @@ export type Page =
   | { name: 'inventory'; tab?: InventoryTab; selected?: string }
   | { name: 'product'; productId: string | null }
   | { name: 'import' }
+  | { name: 'counts' }
+  | { name: 'count'; countId: string }
+  | { name: 'transfers' }
   | { name: 'purchases'; tab?: 'new' | 'history' | 'suppliers' }
   | { name: 'expenses' }
   | { name: 'khata' }
@@ -102,7 +107,7 @@ const NAV: [Page['name'], StringKey][] = [
 
 /** Which nav item a page belongs under. */
 function section(page: Page): Page['name'] {
-  if (page.name === 'product' || page.name === 'import') return 'inventory';
+  if (['product', 'import', 'counts', 'count', 'transfers'].includes(page.name)) return 'inventory';
   return page.name;
 }
 
@@ -169,6 +174,15 @@ export function Backoffice({
       break;
     case 'import':
       content = <ImportProducts go={go} />;
+      break;
+    case 'counts':
+      content = <StockCounts go={go} />;
+      break;
+    case 'count':
+      content = <StockCountDetail key={page.countId} countId={page.countId} go={go} />;
+      break;
+    case 'transfers':
+      content = <Transfers store={store} printer={printer} go={go} />;
       break;
     case 'purchases':
       content = <Purchases tillCode={tillCode} initialTab={page.tab} />;

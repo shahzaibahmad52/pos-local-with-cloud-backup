@@ -38,11 +38,16 @@ const ACTIONS: Record<string, [string, string]> = {
   'khata.opening': ['Khata old balance added', 'کھاتے کا پرانا بقایا'],
   'customer.update': ['Customer changed', 'گاہک میں تبدیلی'],
   'store.update': ['Store details changed', 'اسٹور کی معلومات تبدیل'],
+  'count.start': ['Stock count started', 'اسٹاک گنتی شروع'],
+  'count.apply': ['Stock count applied', 'اسٹاک گنتی لاگو'],
+  'count.cancel': ['Stock count cancelled', 'اسٹاک گنتی منسوخ'],
+  'transfer.send': ['Stock sent to branch', 'برانچ کو اسٹاک بھیجا'],
+  'transfer.receive': ['Stock received from branch', 'برانچ سے اسٹاک وصول'],
   'recovery.new': ['New recovery code made', 'نیا ریکوری کوڈ'],
   'recovery.used': ['Password reset with recovery code', 'ریکوری کوڈ سے پاس ورڈ ری سیٹ'],
 };
 
-const MONEY_KEYS = ['amount', 'refund', 'counted', 'expected', 'difference', 'openingCash', 'khata', 'net', 'paidNow', 'costChange'];
+const MONEY_KEYS = ['amount', 'refund', 'counted', 'expected', 'difference', 'openingCash', 'khata', 'net', 'paidNow', 'costChange', 'short', 'extra'];
 
 function actionLabel(action: string, lang: Language): string {
   const pair = ACTIONS[action];

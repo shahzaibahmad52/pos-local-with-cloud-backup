@@ -296,3 +296,4 @@ h2 { margin: 0; font-size: 18px; }
   .report-print .tbl th, .report-print .tbl td { padding: 4px 6px; font-size: 10.5px; background: none; }
   .report-print .statement { max-width: none; }
 }
+.link-btn { border: 0; background: none; padding: 0; color: var(--brand); font: inherit; cursor: pointer; }

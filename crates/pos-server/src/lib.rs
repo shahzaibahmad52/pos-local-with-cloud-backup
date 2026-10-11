@@ -9,6 +9,7 @@
 pub mod api;
 pub mod auth;
 pub mod cloud;
+pub mod counts;
 pub mod dashboard;
 pub mod db;
 pub mod error;
@@ -28,6 +29,7 @@ pub mod seed;
 pub mod settings;
 pub mod shifts;
 pub mod store;
+pub mod transfers;
 
 use std::{net::SocketAddr, path::PathBuf};
 

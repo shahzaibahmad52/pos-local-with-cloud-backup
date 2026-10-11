@@ -172,7 +172,7 @@ pub fn activity(conn: &Connection, date: &str, filter: &str) -> AppResult<Vec<Ac
             "attention" => e.flagged,
             "approvals" => e.approved_by_name.is_some(),
             "money" => ["sale.", "return.", "shift.", "cash."].iter().any(|p| e.action.starts_with(p)),
-            "stock" => ["product.", "stock."].iter().any(|p| e.action.starts_with(p)),
+            "stock" => ["product.", "stock.", "count.", "transfer."].iter().any(|p| e.action.starts_with(p)),
             _ => true,
         })
         .collect())

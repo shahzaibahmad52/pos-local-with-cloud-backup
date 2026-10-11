@@ -98,6 +98,12 @@ export function Inventory({
           )}
         </div>
         <div className="bo-actions">
+          <button type="button" className="btn" onClick={() => go({ name: 'counts' })}>
+            {t('stockCount')}
+          </button>
+          <button type="button" className="btn" onClick={() => go({ name: 'transfers' })}>
+            {t('branchTransfers')}
+          </button>
           <button type="button" className="btn" onClick={() => go({ name: 'import' })}>
             {t('importExcel')}
           </button>

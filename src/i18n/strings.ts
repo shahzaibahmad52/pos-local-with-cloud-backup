@@ -3,10 +3,12 @@
 
 import { boEn, boUr } from './backoffice';
 import { repEn, repUr } from './reports';
+import { opsEn, opsUr } from './stockops';
 
 const en = {
   ...boEn,
   ...repEn,
+  ...opsEn,
   appName: 'Medical Store POS',
   loading: 'Loading…',
   retry: 'Try again',
@@ -246,6 +248,7 @@ export type StringKey = keyof typeof en;
 const ur: Record<StringKey, string> = {
   ...boUr,
   ...repUr,
+  ...opsUr,
   appName: 'میڈیکل اسٹور POS',
   loading: 'لوڈ ہو رہا ہے…',
   retry: 'دوبارہ کوشش کریں',
