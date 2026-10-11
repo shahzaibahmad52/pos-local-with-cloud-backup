@@ -3,6 +3,7 @@
 // thermal printer, even one without an Urdu font.
 
 import type { Block, Doc } from './doc';
+import { code128Modules } from './code128';
 import { qrModules } from './qr';
 
 /** Packs RGBA pixels into rows of bits, 1 = black dot, most significant bit first. */
@@ -149,6 +150,23 @@ function drawDoc(ctx: CanvasRenderingContext2D, doc: Doc, width: number): number
           ctx.fillText(line, rtl ? width - margin : margin, baseline(px));
           y += lineHeight(px);
         }
+        return;
+      }
+      case 'barcode': {
+        const m = code128Modules(b.text);
+        if (m) {
+          // Two or three dots a bar at 80 mm (0.25–0.375 mm): what shop scanners read best.
+          const bar = Math.max(1, Math.min(3, Math.floor((inner - 20 * scale) / m.length)));
+          const left = Math.round((width - bar * m.length) / 2);
+          const tall = Math.round(70 * scale);
+          y += Math.round(8 * scale);
+          m.forEach((dark, i) => dark && ctx.fillRect(left + i * bar, y, bar, tall));
+          y += tall + Math.round(4 * scale);
+        }
+        font(small, false, true);
+        ctx.textAlign = 'center';
+        ctx.fillText(b.text, width / 2, baseline(small));
+        y += lineHeight(small);
         return;
       }
       case 'qr': {

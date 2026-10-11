@@ -1,6 +1,24 @@
 import { createPortal } from 'react-dom';
 import type { Doc } from './doc';
+import { code128Modules } from './code128';
 import { qrModules } from './qr';
+
+function Barcode({ text }: { text: string }) {
+  const m = code128Modules(text);
+  if (!m) return <div className="center mono">{text}</div>;
+  const quiet = 10;
+  const n = m.length + quiet * 2;
+  const path = m.map((dark, x) => (dark ? `M${x + quiet} 0h1v1h-1z` : '')).join('');
+  return (
+    <div className="center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+      <svg viewBox={`0 0 ${n} 1`} width="100%" height={44} preserveAspectRatio="none" role="img" aria-label={text} shapeRendering="crispEdges">
+        <rect width={n} height={1} fill="#fff" />
+        <path d={path} fill="#000" />
+      </svg>
+      <span className="mono" style={{ fontSize: 10.5 }} dir="ltr">{text}</span>
+    </div>
+  );
+}
 
 function QrCode({ text }: { text: string }) {
   const m = qrModules(text);
@@ -46,6 +64,8 @@ export function DocView({ doc }: { doc: Doc }) {
                 <span className="ltr">{b.value}</span>
               </div>
             );
+          case 'barcode':
+            return <Barcode key={i} text={b.text} />;
           case 'qr':
             return (
               <div key={i} className="center">

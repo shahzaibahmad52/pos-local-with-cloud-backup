@@ -218,6 +218,8 @@ export const api = {
     drugLicense?: string;
     receiptFooter?: string;
     receiptFooterUr?: string;
+    receiptPolicy?: string;
+    receiptPolicyUr?: string;
     receiptLanguage: ReceiptLanguage;
   }) => request<StoreHeader>('PUT', '/api/store', input),
   users: () => request<UserRow[]>('GET', '/api/users'),

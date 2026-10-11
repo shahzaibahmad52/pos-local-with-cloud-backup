@@ -5,7 +5,7 @@ mod common;
 use pos_server::{
     auth::{self, Auth, User},
     counts::{self, LineInput, StartInput},
-    db, inventory, products, returns, rules, sales, seed, shifts, store,
+    db, inventory, products, returns, rules, sales, seed, settings, shifts, store,
 };
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -335,4 +335,20 @@ fn stock_history_says_why() {
         .unwrap();
     let d = inventory::detail(&conn, &p.id).unwrap();
     assert_eq!((d.moves[0].reason.as_str(), d.moves[0].why.as_deref()), ("adjust", Some("expired")));
+}
+
+#[test]
+fn the_returns_policy_can_be_reworded_or_left_off() {
+    let mut conn = demo();
+    let owner = user(&conn, "Owner");
+    assert_eq!(sales::store_header(&conn).unwrap().receipt_policy, None, "standard wording until set");
+    let save = |conn: &mut Connection, en: &str| {
+        let input: settings::StoreInput = input(json!({ "name": "Bhatti Drug Store", "receiptLanguage": "en",
+            "receiptPolicy": en, "receiptPolicyUr": "" }));
+        settings::update_store(conn, &owner, &input).unwrap()
+    };
+    let h = save(&mut conn, "  Exchange within 3 days.  ");
+    assert_eq!(h.receipt_policy.as_deref(), Some("Exchange within 3 days."));
+    assert_eq!(h.receipt_policy_ur.as_deref(), Some(""), "emptied: print none");
+    assert_eq!(save(&mut conn, "").receipt_policy.as_deref(), Some(""));
 }

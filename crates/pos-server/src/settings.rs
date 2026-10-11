@@ -21,6 +21,11 @@ pub struct StoreInput {
     pub drug_license: Option<String>,
     pub receipt_footer: Option<String>,
     pub receipt_footer_ur: Option<String>,
+    /// Left out: unchanged. Empty: no returns policy on receipts.
+    #[serde(default)]
+    pub receipt_policy: Option<String>,
+    #[serde(default)]
+    pub receipt_policy_ur: Option<String>,
     pub receipt_language: String,
 }
 
@@ -60,6 +65,12 @@ pub fn update_store(conn: &mut Connection, user: &User, input: &StoreInput) -> A
     )?;
     set_or_clear(&tx, "receipt_footer", &input.receipt_footer)?;
     set_or_clear(&tx, "receipt_footer_ur", &input.receipt_footer_ur)?;
+    // Kept even when empty: an empty policy means "print none", unlike one never set.
+    for (key, value) in [("receipt_policy", &input.receipt_policy), ("receipt_policy_ur", &input.receipt_policy_ur)] {
+        if let Some(v) = value {
+            db::set_setting(&tx, key, v.trim())?;
+        }
+    }
     db::set_setting(&tx, "receipt_language", &input.receipt_language)?;
     db::audit(&tx, Some(&user.id), None, "store.update", &json!({ "name": input.name.trim() }), None)?;
     tx.commit()?;

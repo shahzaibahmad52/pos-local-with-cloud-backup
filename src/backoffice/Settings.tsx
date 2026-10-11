@@ -4,7 +4,7 @@ import type { CloudPage, Language, ReceiptLanguage, StoreHeader, StoreSettings, 
 import { describeError } from '../i18n/errors';
 import { useI18n } from '../i18n/i18n';
 import { PrintPortal } from '../print/DocView';
-import { recoveryCodeDoc, type Doc } from '../print/doc';
+import { DEFAULT_POLICY, recoveryCodeDoc, type Doc } from '../print/doc';
 import { printDoc, type PrinterSettings } from '../print/printer';
 import { CloudBackup } from './Cloud';
 import { FbrCard } from './Fbr';
@@ -195,6 +195,9 @@ function StoreForm({ store, onSaved }: { store: StoreHeader; onSaved: (s: StoreH
     drugLicense: store.drugLicense ?? '',
     receiptFooter: store.receiptFooter ?? '',
     receiptFooterUr: store.receiptFooterUr ?? '',
+    // Until the store writes its own, the standard wording is what prints.
+    receiptPolicy: store.receiptPolicy ?? DEFAULT_POLICY.en,
+    receiptPolicyUr: store.receiptPolicyUr ?? DEFAULT_POLICY.ur,
     receiptLanguage: store.receiptLanguage,
   });
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -233,6 +236,15 @@ function StoreForm({ store, onSaved }: { store: StoreHeader; onSaved: (s: StoreH
         <div className="field">
           <label className="label" htmlFor="st-footer-ur">{t('footerUr')}</label>
           <input id="st-footer-ur" className="input" lang="ur" dir="rtl" value={f.receiptFooterUr} onChange={(e) => set({ receiptFooterUr: e.target.value })} />
+        </div>
+        <div className="field" style={{ gridColumn: '1 / -1' }}>
+          <label className="label" htmlFor="st-policy">{t('policyEn')}</label>
+          <textarea id="st-policy" className="input" rows={2} style={{ height: 'auto', padding: 10 }} value={f.receiptPolicy} onChange={(e) => set({ receiptPolicy: e.target.value })} />
+        </div>
+        <div className="field" style={{ gridColumn: '1 / -1' }}>
+          <label className="label" htmlFor="st-policy-ur">{t('policyUr')}</label>
+          <textarea id="st-policy-ur" className="input" lang="ur" dir="rtl" rows={2} style={{ height: 'auto', padding: 10 }} value={f.receiptPolicyUr} onChange={(e) => set({ receiptPolicyUr: e.target.value })} />
+          <span className="help">{t('policyHelp')}</span>
         </div>
         <div className="field">
           <label className="label" htmlFor="st-rlang">{t('defaultReceiptLang')}</label>

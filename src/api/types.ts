@@ -62,6 +62,9 @@ export interface StoreHeader {
   drugLicense: string | null;
   receiptFooter: string | null;
   receiptFooterUr: string | null;
+  /** Returns policy on receipts: null prints the standard wording, '' prints none. */
+  receiptPolicy?: string | null;
+  receiptPolicyUr?: string | null;
   receiptLanguage: ReceiptLanguage;
 }
 

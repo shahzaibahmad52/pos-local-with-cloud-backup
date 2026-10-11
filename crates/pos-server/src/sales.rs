@@ -136,6 +136,10 @@ pub struct StoreHeader {
     pub drug_license: Option<String>,
     pub receipt_footer: Option<String>,
     pub receipt_footer_ur: Option<String>,
+    /// The returns policy printed on receipts. Not set: the standard wording;
+    /// set but empty: nothing is printed.
+    pub receipt_policy: Option<String>,
+    pub receipt_policy_ur: Option<String>,
     pub receipt_language: String,
 }
 
@@ -747,6 +751,8 @@ pub fn store_header(conn: &Connection) -> AppResult<StoreHeader> {
         drug_license,
         receipt_footer: db::get_setting(conn, "receipt_footer")?,
         receipt_footer_ur: db::get_setting(conn, "receipt_footer_ur")?,
+        receipt_policy: db::get_setting(conn, "receipt_policy")?,
+        receipt_policy_ur: db::get_setting(conn, "receipt_policy_ur")?,
         receipt_language: db::get_setting(conn, "receipt_language")?.unwrap_or_else(|| "en".into()),
     })
 }
@@ -791,6 +797,8 @@ pub fn receipt(conn: &Connection, sale_id: &str) -> AppResult<Option<Receipt>> {
                             drug_license: None,
                             receipt_footer: None,
                             receipt_footer_ur: None,
+                            receipt_policy: None,
+                            receipt_policy_ur: None,
                             receipt_language: "en".into(),
                         },
                     },

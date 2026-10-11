@@ -14,7 +14,9 @@ export type Block =
   /** Full-width text; product names are always left-to-right. */
   | { kind: 'text'; text: string; bold?: boolean; ltr?: boolean }
   /** A QR code, centred (FBR's invoice number). */
-  | { kind: 'qr'; text: string };
+  | { kind: 'qr'; text: string }
+  /** A Code 128 barcode, centred, with the text under it (receipt number, for returns). */
+  | { kind: 'barcode'; text: string };
 
 export interface Doc {
   dir: 'ltr' | 'rtl';
@@ -195,11 +197,24 @@ export function saleDoc(r: Receipt, lang: ReceiptLanguage): Doc {
   if (r.khataBalance !== null) b.push({ kind: 'row', label: t('khataBalance'), value: formatAmount(r.khataBalance) });
   b.push(...fbrBlocks(r.fbrInvoiceNo, t));
   b.push({ kind: 'rule' });
-  b.push({ kind: 'center', text: lang === 'both' ? `${L.policy[0]}\n${L.policy[1]}` : t('policy'), small: true });
+  const policy = returnsPolicy(r.store, lang);
+  if (policy) b.push({ kind: 'center', text: policy, small: true });
   b.push({ kind: 'center', text: footer(r.store, lang), bold: true });
-  b.push({ kind: 'center', text: r.receiptNo, small: true, ltr: true });
+  b.push({ kind: 'barcode', text: r.receiptNo });
   return { ...docDir(lang), blocks: b };
 }
+
+/** The store's returns policy in the receipt's language; the standard wording if never set, none if cleared. */
+function returnsPolicy(store: StoreHeader, lang: ReceiptLanguage): string {
+  const en = store.receiptPolicy ?? L.policy[0];
+  const ur = store.receiptPolicyUr ?? L.policy[1];
+  if (lang === 'ur') return ur;
+  if (lang === 'both') return [en, ur].filter(Boolean).join('\n');
+  return en;
+}
+
+/** The standard returns policy, shown in Settings until the store writes its own. */
+export const DEFAULT_POLICY = { en: L.policy[0], ur: L.policy[1] };
 
 const conditionKey: Record<string, Key> = { restock: 'restock', damaged: 'damaged', expired: 'expired' };
 const refundKey: Record<string, Key> = { cash: 'refundCash', khata: 'refundKhata', card: 'refundCard', jazzcash: 'jazzcash', easypaisa: 'easypaisa' };
